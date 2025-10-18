@@ -130,17 +130,29 @@
     </div>
     <div class="loading" id="loading">Loading Three.js</div>
 
+    <!-- Import Map for Three.js -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script type="module">
-      import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/+esm";
+      import * as THREE from "three";
       import {
         VRM,
         VRMLoaderPlugin,
-      } from "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.0.7/+esm";
-      import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
-      import {
-        VRMAnimationLoaderPlugin,
-        createVRMAnimationClip,
-      } from "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm-animation@0.1.1/+esm";
+      } from "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.0.0/+esm";
+      import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+      
+      // ⚠️ VRMAアニメーション機能は一旦コメントアウト
+      // import {
+      //   VRMAnimationLoaderPlugin,
+      //   createVRMAnimationClip,
+      // } from "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm-animation@1.0.7/+esm";
 
       // ローディング表示を消す
       document.getElementById("loading").style.display = "none";
@@ -155,33 +167,42 @@
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0x212121);
 
+      // デバッグ用グリッド
+      const gridHelper = new THREE.GridHelper(10, 10);
+      scene.add(gridHelper);
+
+      // デバッグ用軸ヘルパー
+      const axesHelper = new THREE.AxesHelper(5);
+      scene.add(axesHelper);
+
       const camera = new THREE.PerspectiveCamera(
-        30,
+        50, // FOVを広げる
         window.innerWidth / window.innerHeight,
         0.1,
-        20
+        100
       );
-      camera.position.set(0, 1.4, 3);
-      camera.lookAt(0, 1.2, 0);
+      camera.position.set(0, 1.5, 5); // もっと引く
+      camera.lookAt(0, 1, 0);
 
-      // ライト
-      const directionalLight = new THREE.DirectionalLight(0xffffff, Math.PI);
+      // ライト（もっと明るく）
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
       directionalLight.position.set(1, 1, 1);
       scene.add(directionalLight);
 
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
       scene.add(ambientLight);
 
-      // VRM & アニメーション管理
+      // VRM管理
       let vrm = null;
-      let mixer = null;
-      const loadedAnimations = new Map();
-      let currentAction = null;
+      let mixer = null; // 将来のVRMA対応用
+      const loadedAnimations = new Map(); // 将来のVRMA対応用
+      let currentAction = null; // 将来のVRMA対応用
 
-      // VRMローダー（VRMA対応）
+      // VRMローダー
       const loader = new GLTFLoader();
       loader.register((parser) => new VRMLoaderPlugin(parser));
-      loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+      // VRMA対応は後で追加
+      // loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 
       // UI更新関数
       function updateStatus(text, connected = true) {
@@ -233,6 +254,8 @@
             case "load_vrm_model":
               // VRMモデル読み込み
               updateStatus("Loading VRM...", true);
+              console.log("🔄 VRM読み込み開始:", message.data.filePath);
+              
               const gltf = await loader.loadAsync(message.data.filePath);
               vrm = gltf.userData.vrm;
               
@@ -240,7 +263,20 @@
                 throw new Error("VRMデータが見つかりません");
               }
 
+              console.log("📦 VRMデータ取得成功:", vrm);
+              console.log("📏 VRMシーンの子要素数:", vrm.scene.children.length);
+              
+              // VRMシーンの境界ボックスを計算
+              const bbox = new THREE.Box3().setFromObject(vrm.scene);
+              const size = bbox.getSize(new THREE.Vector3());
+              const center = bbox.getCenter(new THREE.Vector3());
+              
+              console.log("📐 VRMサイズ:", size);
+              console.log("📍 VRM中心:", center);
+              console.log("🎯 VRM位置:", vrm.scene.position);
+              
               scene.add(vrm.scene);
+              console.log("✅ シーンに追加完了");
 
               // AnimationMixerを初期化
               mixer = new THREE.AnimationMixer(vrm.scene);
@@ -293,81 +329,12 @@
               break;
 
             case "load_vrma_animation":
-              // VRMAアニメーション読み込み
-              if (!vrm) {
-                console.error("VRMモデルが読み込まれていません");
-                break;
-              }
-
-              updateStatus("Loading VRMA...", true);
-              const animGltf = await loader.loadAsync(message.data.animationPath);
-              const vrmAnimations = animGltf.userData.vrmAnimations;
-
-              if (vrmAnimations && vrmAnimations.length > 0) {
-                const clip = createVRMAnimationClip(vrmAnimations[0], vrm);
-                loadedAnimations.set(message.data.animationName, clip);
-                console.log(
-                  `✓ VRMAアニメーション読み込み: ${message.data.animationName}`
-                );
-                updateStatus("VRMA Loaded", true);
-              }
-              break;
-
             case "play_vrma_animation":
-              // VRMAアニメーション再生
-              if (!vrm || !mixer) {
-                console.error("VRMモデルまたはMixerが初期化されていません");
-                break;
-              }
-
-              const clip = loadedAnimations.get(message.data.animationName);
-              if (!clip) {
-                console.error(
-                  `アニメーション "${message.data.animationName}" が見つかりません`
-                );
-                break;
-              }
-
-              // 既存のアニメーションを停止
-              if (currentAction) {
-                currentAction.fadeOut(message.data.fadeInDuration || 0.3);
-              }
-
-              // 新しいアニメーションを再生
-              currentAction = mixer.clipAction(clip);
-              currentAction.reset();
-              currentAction.fadeIn(message.data.fadeInDuration || 0.3);
-              currentAction.setLoop(
-                message.data.loop ? THREE.LoopRepeat : THREE.LoopOnce,
-                message.data.loop ? Infinity : 1
-              );
-
-              if (!message.data.loop) {
-                currentAction.clampWhenFinished = true;
-              }
-
-              currentAction.play();
-              console.log(
-                `▶ アニメーション再生: ${message.data.animationName}`
-              );
-              updateAnimationName(
-                `${message.data.animationName} ${message.data.loop ? "(Loop)" : ""}`
-              );
-              break;
-
             case "stop_vrma_animation":
-              // アニメーション停止
-              if (currentAction) {
-                currentAction.fadeOut(message.data.fadeOutDuration || 0.3);
-                setTimeout(() => {
-                  if (currentAction) {
-                    currentAction.stop();
-                    currentAction = null;
-                  }
-                  updateAnimationName("None");
-                  console.log("⏹ アニメーション停止");
-                }, (message.data.fadeOutDuration || 0.3) * 1000);
-              }
+              // ⚠️ VRMAアニメーション機能は一旦無効化
+              // TODO: 正しいCDNパッケージが見つかったら有効化
+              console.log(`⚠️ VRMA機能は現在無効です: ${message.type}`);
+              updateStatus("VRMA機能は未実装", true);
               break;
           }
         } catch (error) {
