@@ -8,6 +8,11 @@
 
 **コンセプト**: 「AI に話しかけるだけで、VRM キャラクターが動く」
 
+**重要**:
+
+- ✅ **AI 推論は Claude Desktop が担当** - このサーバーに AI SDK は不要
+- ✅ **MCP サーバーはツール提供のみ** - `@modelcontextprotocol/sdk` だけ使用
+
 **主な機能**:
 
 - ✅ VRM モデルの読み込み・表示
@@ -15,6 +20,17 @@
 - ✅ ボーン操作（個別制御）
 - ✅ **VRMA アニメーション再生**（ループ・フェード対応）
 - ✅ Claude Desktop からの自然言語制御
+
+**必要な依存関係**:
+
+```json
+{
+  "@modelcontextprotocol/sdk": "^0.5.0", // ← MCP通信のみ
+  "express": "^4.18.2", // HTTPサーバー
+  "ws": "^8.16.0" // WebSocket
+}
+// ❌ AI SDK（Gemini/OpenAI/Anthropic）は不要！
+```
 
 ## システム全体像
 
@@ -50,35 +66,48 @@
 
 ### 🎯 **設計の核心**
 
+#### **重要: AI 推論は Claude Desktop が担当**
+
+```text
+ユーザー: "嬉しい表情で手を振って"
+  ↓
+Claude Desktop (内蔵AI):
+  - 自然言語を理解
+  - 適切なツールを選択  ← ★ AIはここで動く！
+  - ツールパラメータを生成
+  ↓
+MCP Server:
+  - ツールを実行するだけ  ← AI推論はしない
+  - VRMの状態を管理
+  - ブラウザに転送
+```
+
+**つまり**:
+
+- ❌ MCP サーバーに AI SDK（Gemini/OpenAI）は不要
+- ✅ Claude Desktop が全部やってくれる
+- ✅ MCP サーバーは「ツール提供者」に徹する
+
 #### **Node.js で Three.js を使わない理由**
 
-Node.js 上で Three.js を動かすこと自体は可能ですが：
+Node.js 上で Three.js を動かすと：
 
-```typescript
-// ❌ Node.jsでレンダリング（非推奨）
-import { createCanvas } from "canvas"; // ネイティブビルド必要
-import gl from "gl"; // OpenGL依存
-// → 環境構築が複雑、Python/C++コンパイラ必須
-// → 静的画像出力のみ（リアルタイム表示不可）
-```
+- ❌ ネイティブモジュール必要（Python/C++コンパイラ必須）
+- ❌ 静的画像出力のみ（リアルタイム表示不可）
 
-```html
-<!-- ✅ ブラウザでレンダリング（推奨） -->
-<script type="module">
-  import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/+esm";
-  // → インストール不要、CDNから直接
-  // → WebGLネイティブサポート
-  // → 60FPSリアルタイム描画
-</script>
-```
+ブラウザで動かすと：
+
+- ✅ インストール不要、CDN から直接
+- ✅ WebGL ネイティブサポート
+- ✅ 60FPS リアルタイム描画
 
 #### **役割分担の明確化**
 
-| Component          | 役割            | 技術                | 理由                         |
-| ------------------ | --------------- | ------------------- | ---------------------------- |
-| **Claude Desktop** | ユーザー入力    | MCP Protocol        | AI ツール呼び出しの標準      |
-| **MCP Server**     | 状態管理 + 中継 | Node.js + WebSocket | stdio と HTTP を同時処理可能 |
-| **Browser**        | VRM 表示        | Three.js (WebGL)    | リアルタイム 3D 描画に最適   |
+| Component          | 役割                  | 技術                | AI 推論   |
+| ------------------ | --------------------- | ------------------- | --------- |
+| **Claude Desktop** | AI 推論 + ツール選択  | MCP Protocol        | ✅ する   |
+| **MCP Server**     | ツール実行 + 状態管理 | Node.js + WebSocket | ❌ しない |
+| **Browser**        | VRM 表示              | Three.js (WebGL)    | ❌ しない |
 
 ## 詳細アーキテクチャ
 
