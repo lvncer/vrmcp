@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VRM Viewer with VRMA Animation</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        overflow: hidden;
+        background: #1a1a1a;
+      }
+
+      #canvas {
+        width: 100vw;
+        height: 100vh;
+        display: block;
+      }
+
+      #info {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        color: white;
+        font-family: "Monaco", "Courier New", monospace;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 15px 20px;
+        border-radius: 10px;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        max-width: 400px;
+        font-size: 13px;
+        line-height: 1.6;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      }
+
+      #info .status {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 8px;
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      #info .status.connected {
+        background: #00ff00;
+      }
+
+      #info .status.disconnected {
+        background: #ff0000;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      .title {
+        font-size: 16px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: #00d4ff;
+      }
+
+      .line {
+        margin: 5px 0;
+        color: #ccc;
+      }
+
+      .line strong {
+        color: #fff;
+      }
+
+      .loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-size: 20px;
+        text-align: center;
+      }
+
+      .loading::after {
+        content: "...";
+        animation: dots 1.5s steps(4, end) infinite;
+      }
+
+      @keyframes dots {
+        0%,
+        20% {
+          content: ".";
+        }
+        40% {
+          content: "..";
+        }
+        60%,
+        100% {
+          content: "...";
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <div id="info">
+      <div class="title">🎭 VRM Viewer (VRMA対応)</div>
+      <div class="line">
+        <span class="status disconnected"></span><strong>Status:</strong>
+        <span id="status-text">Connecting...</span>
+      </div>
+      <div class="line">
+        <strong>Model:</strong> <span id="model-name">Not loaded</span>
+      </div>
+      <div class="line">
+        <strong>Animation:</strong> <span id="animation-name">None</span>
+      </div>
+    </div>
+    <div class="loading" id="loading">Loading Three.js</div>
+
+    <script type="module">
+      import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/+esm";
+      import {
+        VRM,
+        VRMLoaderPlugin,
+      } from "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.0.7/+esm";
+      import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
+      import {
+        VRMAnimationLoaderPlugin,
+        createVRMAnimationClip,
+      } from "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm-animation@0.1.1/+esm";
+
+      // ローディング表示を消す
+      document.getElementById("loading").style.display = "none";
+
+      // Three.js初期化
+      const canvas = document.getElementById("canvas");
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x212121);
+
+      const camera = new THREE.PerspectiveCamera(
+        30,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        20
+      );
+      camera.position.set(0, 1.4, 3);
+      camera.lookAt(0, 1.2, 0);
+
+      // ライト
+      const directionalLight = new THREE.DirectionalLight(0xffffff, Math.PI);
+      directionalLight.position.set(1, 1, 1);
+      scene.add(directionalLight);
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambientLight);
+
+      // VRM & アニメーション管理
+      let vrm = null;
+      let mixer = null;
+      const loadedAnimations = new Map();
+      let currentAction = null;
+
+      // VRMローダー（VRMA対応）
+      const loader = new GLTFLoader();
+      loader.register((parser) => new VRMLoaderPlugin(parser));
+      loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+
+      // UI更新関数
+      function updateStatus(text, connected = true) {
+        const statusEl = document.querySelector(".status");
+        const statusText = document.getElementById("status-text");
+        statusEl.className = `status ${connected ? "connected" : "disconnected"}`;
+        statusText.textContent = text;
+      }
+
+      function updateModelName(name) {
+        document.getElementById("model-name").textContent = name;
+      }
+
+      function updateAnimationName(name) {
+        document.getElementById("animation-name").textContent = name;
+      }
+
+      // WebSocket接続
+      const ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}`);
+
+      ws.onopen = () => {
+        console.log("✓ WebSocket接続成功");
+        updateStatus("Connected", true);
+      };
+
+      ws.onclose = () => {
+        console.log("✗ WebSocket切断");
+        updateStatus("Disconnected", false);
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        updateStatus("Error", false);
+      };
+
+      ws.onmessage = async (event) => {
+        const message = JSON.parse(event.data);
+        console.log("📨 受信:", message);
+
+        try {
+          switch (message.type) {
+            case "init":
+              // 初期化メッセージ
+              if (message.data.isLoaded) {
+                updateModelName(message.data.modelPath);
+              }
+              break;
+
+            case "load_vrm_model":
+              // VRMモデル読み込み
+              updateStatus("Loading VRM...", true);
+              const gltf = await loader.loadAsync(message.data.filePath);
+              vrm = gltf.userData.vrm;
+              
+              if (!vrm) {
+                throw new Error("VRMデータが見つかりません");
+              }
+
+              scene.add(vrm.scene);
+
+              // AnimationMixerを初期化
+              mixer = new THREE.AnimationMixer(vrm.scene);
+
+              console.log("✓ VRMモデル読み込み完了");
+              updateStatus("VRM Loaded", true);
+              updateModelName(message.data.filePath.split("/").pop());
+              break;
+
+            case "set_vrm_expression":
+              // 表情設定
+              if (vrm?.expressionManager) {
+                vrm.expressionManager.setValue(
+                  message.data.expression,
+                  message.data.weight
+                );
+                console.log(
+                  `😊 表情設定: ${message.data.expression} = ${message.data.weight}`
+                );
+              }
+              break;
+
+            case "animate_vrm_bone":
+              // ボーンアニメーション
+              if (vrm?.humanoid) {
+                const bone = vrm.humanoid.getNormalizedBoneNode(
+                  message.data.boneName
+                );
+                if (bone) {
+                  const { x, y, z, w } = message.data.rotation;
+                  bone.quaternion.set(x, y, z, w);
+                  console.log(`🦴 ボーン回転: ${message.data.boneName}`);
+                }
+              }
+              break;
+
+            case "set_vrm_pose":
+              // ポーズ設定
+              if (vrm) {
+                if (message.data.position) {
+                  const { x, y, z } = message.data.position;
+                  vrm.scene.position.set(x, y, z);
+                }
+                if (message.data.rotation) {
+                  const { x, y, z } = message.data.rotation;
+                  vrm.scene.rotation.set(x, y, z);
+                }
+                console.log("📍 ポーズ更新");
+              }
+              break;
+
+            case "load_vrma_animation":
+              // VRMAアニメーション読み込み
+              if (!vrm) {
+                console.error("VRMモデルが読み込まれていません");
+                break;
+              }
+
+              updateStatus("Loading VRMA...", true);
+              const animGltf = await loader.loadAsync(message.data.animationPath);
+              const vrmAnimations = animGltf.userData.vrmAnimations;
+
+              if (vrmAnimations && vrmAnimations.length > 0) {
+                const clip = createVRMAnimationClip(vrmAnimations[0], vrm);
+                loadedAnimations.set(message.data.animationName, clip);
+                console.log(
+                  `✓ VRMAアニメーション読み込み: ${message.data.animationName}`
+                );
+                updateStatus("VRMA Loaded", true);
+              }
+              break;
+
+            case "play_vrma_animation":
+              // VRMAアニメーション再生
+              if (!vrm || !mixer) {
+                console.error("VRMモデルまたはMixerが初期化されていません");
+                break;
+              }
+
+              const clip = loadedAnimations.get(message.data.animationName);
+              if (!clip) {
+                console.error(
+                  `アニメーション "${message.data.animationName}" が見つかりません`
+                );
+                break;
+              }
+
+              // 既存のアニメーションを停止
+              if (currentAction) {
+                currentAction.fadeOut(message.data.fadeInDuration || 0.3);
+              }
+
+              // 新しいアニメーションを再生
+              currentAction = mixer.clipAction(clip);
+              currentAction.reset();
+              currentAction.fadeIn(message.data.fadeInDuration || 0.3);
+              currentAction.setLoop(
+                message.data.loop ? THREE.LoopRepeat : THREE.LoopOnce,
+                message.data.loop ? Infinity : 1
+              );
+
+              if (!message.data.loop) {
+                currentAction.clampWhenFinished = true;
+              }
+
+              currentAction.play();
+              console.log(
+                `▶ アニメーション再生: ${message.data.animationName}`
+              );
+              updateAnimationName(
+                `${message.data.animationName} ${message.data.loop ? "(Loop)" : ""}`
+              );
+              break;
+
+            case "stop_vrma_animation":
+              // アニメーション停止
+              if (currentAction) {
+                currentAction.fadeOut(message.data.fadeOutDuration || 0.3);
+                setTimeout(() => {
+                  if (currentAction) {
+                    currentAction.stop();
+                    currentAction = null;
+                  }
+                  updateAnimationName("None");
+                  console.log("⏹ アニメーション停止");
+                }, (message.data.fadeOutDuration || 0.3) * 1000);
+              }
+              break;
+          }
+        } catch (error) {
+          console.error("エラー:", error);
+          updateStatus(`Error: ${error.message}`, false);
+        }
+      };
+
+      // アニメーションループ
+      const clock = new THREE.Clock();
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        const deltaTime = clock.getDelta();
+
+        // VRMアップデート
+        if (vrm) {
+          vrm.update(deltaTime);
+        }
+
+        // AnimationMixerアップデート（VRMA再生用）
+        if (mixer) {
+          mixer.update(deltaTime);
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+
+      // ウィンドウリサイズ対応
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // デバッグ情報
+      console.log("🎭 VRM Viewer initialized");
+      console.log("📡 Waiting for VRM commands...");
+    </script>
+  </body>
+</html>
+
