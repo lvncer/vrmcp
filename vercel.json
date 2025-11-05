@@ -1,13 +1,8 @@
 {
-  "version": 2,
   "functions": {
     "api/**/*.ts": {
-      "runtime": "nodejs20.x",
       "maxDuration": 300
     }
-  },
-  "env": {
-    "NODE_ENV": "production"
   },
   "headers": [
     {
@@ -27,7 +22,6 @@
         }
       ]
     }
-  ],
-  "regions": ["iad1"]
+  ]
 }
 
