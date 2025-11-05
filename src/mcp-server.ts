@@ -12,6 +12,7 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ErrorCode,
@@ -42,17 +43,64 @@ interface VRMState {
   loadedAnimations: string[];
 }
 
+// セキュリティ: レート制限用トークンバケット
+interface RateLimitBucket {
+  tokens: number;
+  lastRefill: number;
+}
+
+class RateLimiter {
+  private buckets = new Map<string, RateLimitBucket>();
+  private maxTokens: number;
+  private refillRate: number; // tokens per second
+
+  constructor(maxTokens = 60, refillRate = 1) {
+    this.maxTokens = maxTokens;
+    this.refillRate = refillRate;
+  }
+
+  check(key: string): boolean {
+    const now = Date.now();
+    let bucket = this.buckets.get(key);
+
+    if (!bucket) {
+      bucket = { tokens: this.maxTokens - 1, lastRefill: now };
+      this.buckets.set(key, bucket);
+      return true;
+    }
+
+    const elapsed = (now - bucket.lastRefill) / 1000;
+    bucket.tokens = Math.min(
+      this.maxTokens,
+      bucket.tokens + elapsed * this.refillRate
+    );
+    bucket.lastRefill = now;
+
+    if (bucket.tokens >= 1) {
+      bucket.tokens -= 1;
+      return true;
+    }
+
+    return false;
+  }
+}
+
 class VRMMCPServer {
   private mcpServer: Server;
   private expressApp: express.Application;
   private wss: WebSocketServer;
   private vrmState: VRMState;
   private connectedClients: Set<WebSocket>;
+  private sseTransports = new Map<string, SSEServerTransport>();
+  private viewerSSEClients = new Set<express.Response>();
+  private rateLimiter = new RateLimiter(60, 1);
 
   // 環境変数から読み取り
   private vrmModelsDir: string;
   private vrmaAnimationsDir: string;
   private viewerPort: number;
+  private mcpApiKey: string | undefined;
+  private allowedOrigins: string[];
 
   constructor() {
     // 環境変数またはデフォルトパス
@@ -64,11 +112,17 @@ class VRMMCPServer {
       path.join(__dirname, "../public/animations");
 
     this.viewerPort = parseInt(process.env.VIEWER_PORT || "3000", 10);
+    this.mcpApiKey = process.env.MCP_API_KEY;
+    this.allowedOrigins = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(",")
+      : ["http://localhost:3000"];
 
     console.error("=== VRM MCP Server Configuration ===");
     console.error(`VRM Models Dir: ${this.vrmModelsDir}`);
     console.error(`VRMA Animations Dir: ${this.vrmaAnimationsDir}`);
     console.error(`Viewer Port: ${this.viewerPort}`);
+    console.error(`MCP API Key: ${this.mcpApiKey ? "SET" : "NOT SET"}`);
+    console.error(`Allowed Origins: ${this.allowedOrigins.join(", ")}`);
     console.error("====================================");
 
     // MCP サーバー初期化
@@ -118,6 +172,156 @@ class VRMMCPServer {
 
     this.setupHandlers();
     this.setupWebSocket();
+    this.setupSSEEndpoints();
+  }
+
+  // セキュリティミドルウェア
+  private checkAuth(req: express.Request, res: express.Response): boolean {
+    if (!this.mcpApiKey) {
+      return true; // APIキー未設定なら認証スキップ
+    }
+    // ヘッダーまたはクエリパラメータからAPIキーを取得
+    const providedKey = req.get("x-api-key") || (req.query.apiKey as string);
+    if (providedKey !== this.mcpApiKey) {
+      res.status(401).json({ error: "Unauthorized" });
+      return false;
+    }
+    return true;
+  }
+
+  private checkCORS(req: express.Request, res: express.Response): boolean {
+    const origin = req.get("origin") || req.get("referer") || "";
+    const allowed = this.allowedOrigins.some(
+      (o) => origin.startsWith(o) || o === "*"
+    );
+
+    if (allowed || !origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin || "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-api-key");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+      return true;
+    }
+
+    res.status(403).json({ error: "Forbidden origin" });
+    return false;
+  }
+
+  private checkRateLimit(req: express.Request, res: express.Response): boolean {
+    const key = req.get("x-api-key") || req.ip || "anonymous";
+    if (!this.rateLimiter.check(key)) {
+      res.status(429).json({ error: "Rate limit exceeded" });
+      return false;
+    }
+    return true;
+  }
+
+  private setupSSEEndpoints(): void {
+    // OPTIONS for CORS preflight
+    this.expressApp.options("/mcp/sse", (req, res) => {
+      this.checkCORS(req, res);
+      res.status(200).end();
+    });
+
+    this.expressApp.options("/mcp/messages", (req, res) => {
+      this.checkCORS(req, res);
+      res.status(200).end();
+    });
+
+    // MCP SSE endpoint (GET)
+    this.expressApp.get("/mcp/sse", async (req, res) => {
+      if (!this.checkAuth(req, res)) return;
+      if (!this.checkCORS(req, res)) return;
+      if (!this.checkRateLimit(req, res)) return;
+
+      const transport = new SSEServerTransport("/mcp/messages", res);
+      this.sseTransports.set(transport.sessionId, transport);
+
+      res.on("close", () => {
+        this.sseTransports.delete(transport.sessionId);
+        console.error(`✗ MCP SSE client disconnected: ${transport.sessionId}`);
+      });
+
+      try {
+        await this.mcpServer.connect(transport);
+        await transport.start();
+        console.error(`✓ MCP SSE client connected: ${transport.sessionId}`);
+
+        // 心拍送信 (30秒ごと)
+        const heartbeat = setInterval(() => {
+          if (res.writable) {
+            res.write(": ping\n\n");
+          } else {
+            clearInterval(heartbeat);
+          }
+        }, 30000);
+
+        res.on("close", () => clearInterval(heartbeat));
+      } catch (error) {
+        console.error("SSE connection error:", error);
+        this.sseTransports.delete(transport.sessionId);
+      }
+    });
+
+    // MCP messages endpoint (POST)
+    this.expressApp.post("/mcp/messages", async (req, res) => {
+      if (!this.checkAuth(req, res)) return;
+      if (!this.checkCORS(req, res)) return;
+      if (!this.checkRateLimit(req, res)) return;
+
+      const sessionId = String(req.query.sessionId || "");
+      const transport = this.sseTransports.get(sessionId);
+
+      if (!transport) {
+        res.status(404).json({ error: "Invalid session" });
+        return;
+      }
+
+      try {
+        await transport.handlePostMessage(req, res);
+      } catch (error) {
+        console.error("Message handling error:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+
+    // Viewer SSE endpoint (GET)
+    this.expressApp.get("/viewer/sse", (req, res) => {
+      if (!this.checkCORS(req, res)) return;
+      if (!this.checkRateLimit(req, res)) return;
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      this.viewerSSEClients.add(res);
+      console.error("✓ Viewer SSE client connected");
+
+      // 接続時に現在の状態を送信
+      res.write(
+        `event: init\ndata: ${JSON.stringify({
+          modelPath: this.vrmState.modelPath,
+          isLoaded: this.vrmState.isLoaded,
+        })}\n\n`
+      );
+
+      // 心拍送信
+      const heartbeat = setInterval(() => {
+        if (res.writable) {
+          res.write(": ping\n\n");
+        } else {
+          clearInterval(heartbeat);
+        }
+      }, 30000);
+
+      req.on("close", () => {
+        clearInterval(heartbeat);
+        this.viewerSSEClients.delete(res);
+        console.error("✗ Viewer SSE client disconnected");
+      });
+    });
   }
 
   private setupHandlers(): void {
@@ -371,10 +575,26 @@ class VRMMCPServer {
   }
 
   private broadcast(message: any): void {
+    // WebSocket broadcast (legacy)
     const data = JSON.stringify(message);
     this.connectedClients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(data);
+      }
+    });
+
+    // SSE broadcast
+    this.broadcastSSE(message);
+  }
+
+  private broadcastSSE(message: any): void {
+    const eventType = message.type || "message";
+    const eventData = JSON.stringify(message.data || message);
+    const sseMessage = `event: ${eventType}\ndata: ${eventData}\n\n`;
+
+    this.viewerSSEClients.forEach((client) => {
+      if (client.writable) {
+        client.write(sseMessage);
       }
     });
   }

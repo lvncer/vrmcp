@@ -220,27 +220,92 @@
         document.getElementById("animation-name").textContent = name;
       }
 
-      // WebSocket接続
-      const ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}`);
+      // SSE接続
+      let eventSource = null;
 
-      ws.onopen = () => {
-        console.log("✓ WebSocket接続成功");
-        updateStatus("Connected", true);
-      };
+      function connectSSE() {
+        eventSource = new EventSource("/viewer/sse");
 
-      ws.onclose = () => {
-        console.log("✗ WebSocket切断");
-        updateStatus("Disconnected", false);
-      };
+        eventSource.onopen = () => {
+          console.log("✓ SSE接続成功");
+          updateStatus("Connected", true);
+        };
 
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        updateStatus("Error", false);
-      };
+        eventSource.onerror = (error) => {
+          console.error("SSE error:", error);
+          updateStatus("Disconnected", false);
+          
+          // 自動再接続 (5秒後)
+          setTimeout(() => {
+            if (eventSource.readyState === EventSource.CLOSED) {
+              console.log("🔄 SSE再接続中...");
+              connectSSE();
+            }
+          }, 5000);
+        };
 
-      ws.onmessage = async (event) => {
-        const message = JSON.parse(event.data);
-        console.log("📨 受信:", message);
+        // 汎用メッセージハンドラ
+        eventSource.addEventListener("message", async (event) => {
+          const message = JSON.parse(event.data);
+          console.log("📨 受信 (message):", message);
+          await handleMessage(message);
+        });
+
+        // 各種イベントハンドラ
+        eventSource.addEventListener("init", async (event) => {
+          const data = JSON.parse(event.data);
+          console.log("📨 受信 (init):", data);
+          if (data.isLoaded) {
+            updateModelName(data.modelPath);
+          }
+        });
+
+        eventSource.addEventListener("load_vrm_model", async (event) => {
+          const data = JSON.parse(event.data);
+          console.log("📨 受信 (load_vrm_model):", data);
+          await handleMessage({ type: "load_vrm_model", data });
+        });
+
+        eventSource.addEventListener("set_vrm_expression", async (event) => {
+          const data = JSON.parse(event.data);
+          console.log("📨 受信 (set_vrm_expression):", data);
+          await handleMessage({ type: "set_vrm_expression", data });
+        });
+
+        eventSource.addEventListener("animate_vrm_bone", async (event) => {
+          const data = JSON.parse(event.data);
+          console.log("📨 受信 (animate_vrm_bone):", data);
+          await handleMessage({ type: "animate_vrm_bone", data });
+        });
+
+        eventSource.addEventListener("set_vrm_pose", async (event) => {
+          const data = JSON.parse(event.data);
+          console.log("📨 受信 (set_vrm_pose):", data);
+          await handleMessage({ type: "set_vrm_pose", data });
+        });
+
+        eventSource.addEventListener("load_vrma_animation", async (event) => {
+          const data = JSON.parse(event.data);
+          console.log("📨 受信 (load_vrma_animation):", data);
+          await handleMessage({ type: "load_vrma_animation", data });
+        });
+
+        eventSource.addEventListener("play_vrma_animation", async (event) => {
+          const data = JSON.parse(event.data);
+          console.log("📨 受信 (play_vrma_animation):", data);
+          await handleMessage({ type: "play_vrma_animation", data });
+        });
+
+        eventSource.addEventListener("stop_vrma_animation", async (event) => {
+          const data = JSON.parse(event.data);
+          console.log("📨 受信 (stop_vrma_animation):", data);
+          await handleMessage({ type: "stop_vrma_animation", data });
+        });
+      }
+
+      // メッセージハンドラ関数
+      async function handleMessage(message) {
+        console.log("📨 処理:", message);
 
         try {
           switch (message.type) {
@@ -341,7 +406,10 @@
           console.error("エラー:", error);
           updateStatus(`Error: ${error.message}`, false);
         }
-      };
+      }
+
+      // SSE接続を開始
+      connectSSE();
 
       // アニメーションループ
       const clock = new THREE.Clock();

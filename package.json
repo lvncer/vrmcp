@@ -4,9 +4,14 @@
   "description": "VRM Model Control via MCP Protocol - AI-driven VRM animation system",
   "type": "module",
   "main": "dist/mcp-server.js",
+  "bin": {
+    "vrm-mcp-server": "./dist/mcp-server.js",
+    "vrm-mcp-gateway": "./dist/gateway.js"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/mcp-server.js",
+    "gateway": "node dist/gateway.js",
     "dev": "tsc && node dist/mcp-server.js",
     "watch": "tsc --watch"
   },
@@ -22,7 +27,9 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
+    "@vercel/node": "^3.0.0",
     "express": "^4.18.2",
+    "node-fetch": "^3.3.2",
     "ws": "^8.16.0"
   },
   "devDependencies": {
