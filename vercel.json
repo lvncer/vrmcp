@@ -6,20 +6,6 @@
       "maxDuration": 300
     }
   },
-  "routes": [
-    {
-      "src": "/api/mcp/sse",
-      "dest": "/api/mcp/sse.ts"
-    },
-    {
-      "src": "/api/mcp/messages",
-      "dest": "/api/mcp/messages.ts"
-    },
-    {
-      "src": "/api/viewer/sse",
-      "dest": "/api/viewer/sse.ts"
-    }
-  ],
   "env": {
     "NODE_ENV": "production"
   },
