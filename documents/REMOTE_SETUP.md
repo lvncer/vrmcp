@@ -10,6 +10,10 @@
 - ✅ 複数のクライアント（Claude Desktop、Cursor等）から同じサーバーにアクセス可能
 - ✅ VRMモデルとアニメーションを一元管理
 - ✅ チーム内で共有可能
+- ✅ **Redisセッション管理**で複数インスタンス対応
+
+> 💡 **重要**: リモート環境では**Redis（Upstash）**が必須です。  
+> セッション情報を共有して、複数インスタンス間での動作を保証します。
 
 ## アーキテクチャ
 
@@ -29,7 +33,84 @@
                                     └──────────────────────┘
 ```
 
-## 1. Vercelへのデプロイ
+## 0. 事前準備：Redis（Upstash）のセットアップ
+
+リモート環境ではRedisが**必須**です。先に設定してください。
+
+👉 **[Redis セットアップガイド（REDIS_SETUP.md）](./REDIS_SETUP.md)** を参照
+
+取得する情報：
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+
+---
+
+## 1. Railwayへのデプロイ（推奨）
+
+### 1.1 Railwayアカウント作成
+
+[railway.app](https://railway.app) でアカウントを作成し、GitHubと連携します。
+
+### 1.2 プロジェクトのデプロイ
+
+```bash
+# Railway CLIをインストール（まだの場合）
+npm install -g @railway/cli
+
+# ログイン
+railway login
+
+# プロジェクトをデプロイ
+cd /path/to/vrm-mcp
+railway init
+railway up
+```
+
+または、Web UIから：
+1. Railway Dashboard → **New Project**
+2. **Deploy from GitHub repo**
+3. リポジトリを選択
+
+### 1.3 環境変数の設定
+
+Railway Dashboard → プロジェクト → **Variables** で以下を設定：
+
+```bash
+# 必須
+MCP_API_KEY=your-super-secret-key-12345
+UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
+UPSTASH_REDIS_REST_TOKEN=AXXXyyyyyzzzzz==
+
+# オプション
+ALLOWED_ORIGINS=https://your-domain.railway.app,http://localhost:3000
+PORT=3000
+```
+
+### 1.4 Start Command の設定
+
+Settings → Deploy → **Start Command**:
+```
+node dist/mcp-server.js
+```
+
+Build Command（自動検出されるはず）:
+```
+npm install && npm run build
+```
+
+### 1.5 デプロイ確認
+
+デプロイが完了すると、URLが表示されます：
+```
+https://vrm-mcp-production-xxxx.up.railway.app
+```
+
+---
+
+## 2. Vercelへのデプロイ（非推奨）
+
+> ⚠️ **注意**: Vercelはステートレス環境のため、SSE長時間接続に向いていません。  
+> 開発/テスト用途のみ推奨。本番はRailwayを使用してください。
 
 ### 1.1 Vercelアカウント作成
 

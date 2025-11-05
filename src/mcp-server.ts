@@ -25,6 +25,7 @@ import { createServer } from "http";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { getSessionManager } from "./redis-client.js";
 
 // ESM での __dirname 取得
 const __filename = fileURLToPath(import.meta.url);
@@ -94,6 +95,7 @@ class VRMMCPServer {
   private sseTransports = new Map<string, SSEServerTransport>();
   private viewerSSEClients = new Set<express.Response>();
   private rateLimiter = new RateLimiter(60, 1);
+  private sessionManager = getSessionManager();
 
   // 環境変数から読み取り
   private vrmModelsDir: string;
@@ -123,6 +125,11 @@ class VRMMCPServer {
     console.error(`Viewer Port: ${this.viewerPort}`);
     console.error(`MCP API Key: ${this.mcpApiKey ? "SET" : "NOT SET"}`);
     console.error(`Allowed Origins: ${this.allowedOrigins.join(", ")}`);
+    console.error(
+      `Redis Sessions: ${
+        this.sessionManager.isAvailable() ? "ENABLED" : "DISABLED (in-memory)"
+      }`
+    );
     console.error("====================================");
 
     // MCP サーバー初期化
@@ -237,8 +244,19 @@ class VRMMCPServer {
       const transport = new SSEServerTransport("/mcp/messages", res);
       this.sseTransports.set(transport.sessionId, transport);
 
-      res.on("close", () => {
+      // Redisにセッション保存
+      if (this.sessionManager.isAvailable()) {
+        await this.sessionManager.saveSession(transport.sessionId, {
+          metadata: { connectedAt: new Date().toISOString() },
+        });
+      }
+
+      res.on("close", async () => {
         this.sseTransports.delete(transport.sessionId);
+        // Redisからセッション削除
+        if (this.sessionManager.isAvailable()) {
+          await this.sessionManager.deleteSession(transport.sessionId);
+        }
         console.error(`✗ MCP SSE client disconnected: ${transport.sessionId}`);
       });
 
@@ -247,10 +265,14 @@ class VRMMCPServer {
         await transport.start();
         console.error(`✓ MCP SSE client connected: ${transport.sessionId}`);
 
-        // 心拍送信 (30秒ごと)
-        const heartbeat = setInterval(() => {
+        // 心拍送信 (30秒ごと) + セッション延長
+        const heartbeat = setInterval(async () => {
           if (res.writable) {
             res.write(": ping\n\n");
+            // Redisセッションの有効期限を延長
+            if (this.sessionManager.isAvailable()) {
+              await this.sessionManager.extendSession(transport.sessionId);
+            }
           } else {
             clearInterval(heartbeat);
           }
@@ -260,6 +282,9 @@ class VRMMCPServer {
       } catch (error) {
         console.error("SSE connection error:", error);
         this.sseTransports.delete(transport.sessionId);
+        if (this.sessionManager.isAvailable()) {
+          await this.sessionManager.deleteSession(transport.sessionId);
+        }
       }
     });
 
@@ -270,7 +295,29 @@ class VRMMCPServer {
       if (!this.checkRateLimit(req, res)) return;
 
       const sessionId = String(req.query.sessionId || "");
-      const transport = this.sseTransports.get(sessionId);
+
+      // まずメモリ内のtransportを確認
+      let transport = this.sseTransports.get(sessionId);
+
+      // メモリにない場合、Redisでセッションの有効性を確認
+      if (!transport && this.sessionManager.isAvailable()) {
+        const session = await this.sessionManager.getSession(sessionId);
+        if (!session) {
+          res.status(404).json({ error: "Invalid session" });
+          return;
+        }
+        // セッションは有効だが、transportがない = 別インスタンス
+        // この場合、現在のインスタンスでは処理できないが、
+        // セッションは有効と判断してエラーを返さない
+        console.error(
+          `⚠️  Session ${sessionId} exists in Redis but not in memory (multi-instance scenario)`
+        );
+        res.status(503).json({
+          error: "Service temporarily unavailable",
+          message: "Session exists but connection is on different instance",
+        });
+        return;
+      }
 
       if (!transport) {
         res.status(404).json({ error: "Invalid session" });

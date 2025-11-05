@@ -214,12 +214,14 @@ curl -N -H "x-api-key: your-key" -H "Accept: text/event-stream" \
 | `VRMA_ANIMATIONS_DIR` | VRMA アニメーションファイルのディレクトリ | `./public/animations` |
 | `VIEWER_PORT`         | Web ビューアのポート番号                  | `3000`                |
 
-### リモート運用用（Vercel）
+### リモート運用用（Railway/Render等）
 
-| 環境変数          | 説明                                 | 必須 |
-| ----------------- | ------------------------------------ | ---- |
-| `MCP_API_KEY`     | APIキー（認証用）                    | ⚠️   |
-| `ALLOWED_ORIGINS` | 許可するオリジン（CORS、カンマ区切り） | ✅   |
+| 環境変数                      | 説明                                   | 必須 |
+| ----------------------------- | -------------------------------------- | ---- |
+| `MCP_API_KEY`                 | APIキー（認証用）                      | ⚠️   |
+| `ALLOWED_ORIGINS`             | 許可するオリジン（CORS、カンマ区切り） | ✅   |
+| `UPSTASH_REDIS_REST_URL`      | Upstash RedisのURL（セッション管理）   | ⚠️   |
+| `UPSTASH_REDIS_REST_TOKEN`    | Upstash Redisのトークン                | ⚠️   |
 
 ### ゲートウェイ用（Claude Desktop連携）
 
