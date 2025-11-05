@@ -166,8 +166,12 @@ export default async function handler(
   }
 
   // レート制限チェック
+  const apiKey = req.headers["x-api-key"];
+  const forwardedFor = req.headers["x-forwarded-for"];
   const rateLimitKey =
-    (req.headers["x-api-key"] as string) || req.headers["x-forwarded-for"] || "anonymous";
+    (typeof apiKey === "string" ? apiKey : "") ||
+    (typeof forwardedFor === "string" ? forwardedFor : "") ||
+    "anonymous";
   if (!checkRateLimit(rateLimitKey)) {
     return res.status(429).json({ error: "Rate limit exceeded" });
   }

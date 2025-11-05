@@ -142,7 +142,7 @@ Cursorから直接SSE接続する場合の設定例：
       "vrm-remote": {
         "transport": {
           "type": "sse",
-          "url": "https://vrm-mcp-xxx.vercel.app/api/mcp/sse",
+          "url": "https://vrmcp.vercel.app/api/mcp/sse",
           "headers": {
             "x-api-key": "your-super-secret-key-12345"
           }
@@ -158,7 +158,7 @@ Cursorから直接SSE接続する場合の設定例：
 デプロイされたサーバーでは、静的ファイルも配信されます：
 
 ```
-https://vrm-mcp-xxx.vercel.app/
+https://vrmcp.vercel.app/
 ```
 
 ブラウザでアクセスすると、VRMビューアが表示されます。SSE経由でリアルタイムに更新されます。
