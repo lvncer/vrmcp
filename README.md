@@ -9,11 +9,25 @@ Claude Desktop から自然言語で指示するだけで、Web ブラウザで 
 
 - **自然言語制御**: 「嬉しい表情で手を振って」→ AI が自動的にツールを呼び出し
 - **VRMA アニメーション対応**: VRMA ファイルの読み込み・再生（ループ・フェード対応）
-- **リアルタイム**: WebSocket で低遅延通信（<10ms）
+- **リアルタイム**: SSE（Server-Sent Events）で低遅延通信
+- **リモート対応**: Vercelにデプロイして、どこからでもアクセス可能
+- **セキュリティ**: APIキー認証、CORS、レート制限を標準実装
 - **柔軟な配置**: 環境変数で VRM/VRMA ファイルの場所を自由に設定
 - **ブラウザレンダリング**: Three.js でスムーズな 60FPS 描画
 
 ## セットアップ
+
+### 📌 セットアップ方法の選択
+
+このプロジェクトは2つの運用モードをサポートしています：
+
+1. **ローカルモード**: ローカル環境でMCPサーバーを起動（従来の方法）
+   - 👉 [ローカルセットアップガイド](./documents/SETUP.md)
+
+2. **リモートモード**: Vercelにデプロイして、どこからでもアクセス（推奨）
+   - 👉 [リモートセットアップガイド](./documents/REMOTE_SETUP.md)
+
+以下は、ローカルモードのクイックスタートです。
 
 ### 1. インストール
 
@@ -141,21 +155,77 @@ Claude: ✓ ボーン "rightUpperArm" をアニメーションしました
 ```sh
 vrm-mcp/
 ├── src/
-│   └── mcp-server.ts          # MCPサーバー実装
+│   ├── mcp-server.ts          # MCPサーバー実装（stdio + SSE）
+│   └── gateway.ts             # stdio↔SSEゲートウェイ（Claude Desktop用）
+├── api/
+│   ├── mcp/
+│   │   ├── sse.ts             # Vercel: MCP SSEエンドポイント
+│   │   └── messages.ts        # Vercel: MCP POSTエンドポイント
+│   └── viewer/
+│       └── sse.ts             # Vercel: Viewer SSEエンドポイント
 ├── public/
-│   ├── viewer.html            # VRMビューア（VRMA対応）
+│   ├── index.html             # VRMビューア（SSE対応）
 │   ├── models/                # VRMモデル配置（デフォルト）
 │   └── animations/            # VRMAアニメーション配置（デフォルト）
+├── documents/
+│   ├── SETUP.md               # ローカルセットアップガイド
+│   └── REMOTE_SETUP.md        # リモートセットアップガイド
 ├── dist/                      # ビルド出力
+├── vercel.json                # Vercel設定
+├── test-sse.sh                # SSE接続テストスクリプト
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
 
+## テスト
+
+### ローカルでのSSE接続テスト
+
+```bash
+# サーバーを起動
+npm run dev
+
+# 別のターミナルでテストスクリプトを実行
+./test-sse.sh
+```
+
+### 手動テスト
+
+```bash
+# MCP SSEエンドポイント
+curl -N -H "Accept: text/event-stream" http://localhost:3000/mcp/sse
+
+# Viewer SSEエンドポイント
+curl -N -H "Accept: text/event-stream" http://localhost:3000/viewer/sse
+
+# APIキー認証テスト（MCP_API_KEY設定時）
+curl -N -H "x-api-key: your-key" -H "Accept: text/event-stream" \
+  http://localhost:3000/mcp/sse
+```
+
 ## 環境変数
+
+### ローカル開発用
 
 | 環境変数              | 説明                                      | デフォルト値          |
 | --------------------- | ----------------------------------------- | --------------------- |
 | `VRM_MODELS_DIR`      | VRM モデルファイルのディレクトリ          | `./public/models`     |
 | `VRMA_ANIMATIONS_DIR` | VRMA アニメーションファイルのディレクトリ | `./public/animations` |
 | `VIEWER_PORT`         | Web ビューアのポート番号                  | `3000`                |
+
+### リモート運用用（Railway/Render等）
+
+| 環境変数                      | 説明                                   | 必須 |
+| ----------------------------- | -------------------------------------- | ---- |
+| `MCP_API_KEY`                 | APIキー（認証用）                      | ⚠️   |
+| `ALLOWED_ORIGINS`             | 許可するオリジン（CORS、カンマ区切り） | ✅   |
+| `UPSTASH_REDIS_REST_URL`      | Upstash RedisのURL（セッション管理）   | ⚠️   |
+| `UPSTASH_REDIS_REST_TOKEN`    | Upstash Redisのトークン                | ⚠️   |
+
+### ゲートウェイ用（Claude Desktop連携）
+
+| 環境変数         | 説明                  | 例                                            |
+| ---------------- | --------------------- | --------------------------------------------- |
+| `MCP_REMOTE_URL` | リモートMCPサーバーURL | `https://vrm-mcp-xxx.vercel.app/api/mcp/sse` |
+| `MCP_API_KEY`    | APIキー               | `your-secret-key`                             |
