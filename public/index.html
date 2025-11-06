@@ -224,7 +224,7 @@
       let eventSource = null;
 
       function connectSSE() {
-        eventSource = new EventSource("/viewer/sse");
+        eventSource = new EventSource("/api/viewer/sse");
 
         eventSource.onopen = () => {
           console.log("✓ SSE接続成功");

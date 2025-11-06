@@ -8,6 +8,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { getSessionManager } from "@/lib/redis-client";
+import { broadcastToViewers } from "../viewer/sse";
 
 // グローバルなMCPサーバーインスタンス（関数呼び出し間で共有）
 let mcpServer: Server | null = null;
@@ -250,12 +251,59 @@ function getOrCreateMCPServer(): Server {
       ],
     }));
 
-    // ツール実行ハンドラー（簡易実装）
+    // ツール実行ハンドラー
     mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
-      // Next.js環境では実際のVRM操作は行わず、コマンドを返すのみ
-      // 実際のVRM制御はビューアページ側で受信して処理
+      // ビューアにブロードキャスト
+      try {
+        switch (name) {
+          case "load_vrm_model":
+            broadcastToViewers("load_vrm_model", {
+              filePath: (args as any).filePath,
+            });
+            break;
+          case "set_vrm_expression":
+            broadcastToViewers("set_vrm_expression", {
+              expression: (args as any).expression,
+              weight: (args as any).weight,
+            });
+            break;
+          case "set_vrm_pose":
+            broadcastToViewers("set_vrm_pose", {
+              position: (args as any).position,
+              rotation: (args as any).rotation,
+            });
+            break;
+          case "animate_vrm_bone":
+            broadcastToViewers("animate_vrm_bone", {
+              boneName: (args as any).boneName,
+              rotation: (args as any).rotation,
+            });
+            break;
+          case "load_vrma_animation":
+            broadcastToViewers("load_vrma_animation", {
+              animationPath: (args as any).animationPath,
+              animationName: (args as any).animationName,
+            });
+            break;
+          case "play_vrma_animation":
+            broadcastToViewers("play_vrma_animation", {
+              animationName: (args as any).animationName,
+              loop: (args as any).loop,
+              fadeInDuration: (args as any).fadeInDuration,
+            });
+            break;
+          case "stop_vrma_animation":
+            broadcastToViewers("stop_vrma_animation", {
+              fadeOutDuration: (args as any).fadeOutDuration,
+            });
+            break;
+        }
+      } catch (error) {
+        console.error("Failed to broadcast to viewers:", error);
+      }
+
       return {
         content: [
           {
