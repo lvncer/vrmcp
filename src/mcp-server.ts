@@ -261,8 +261,8 @@ class VRMMCPServer {
       });
 
       try {
+        // connect() が内部で transport.start() を自動実行するため、明示的な start() は不要
         await this.mcpServer.connect(transport);
-        await transport.start();
         console.error(`✓ MCP SSE client connected: ${transport.sessionId}`);
 
         // 心拍送信 (30秒ごと) + セッション延長
