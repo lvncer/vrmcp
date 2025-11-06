@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --port ${PORT:-3000}",
     "lint": "biome check",
     "format": "biome format --write",
     "gateway": "tsx src/gateway.ts"
