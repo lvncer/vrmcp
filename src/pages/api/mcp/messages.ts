@@ -1,20 +1,15 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import type { NextApiRequest, NextApiResponse } from "next";
+import { transports } from "./sse";
+import { getSessionManager } from "@/lib/redis-client";
 
-// 外部から参照できるようにグローバルスコープで管理
-// 注意: Vercelの関数は別インスタンスで動く可能性があるため、
-// 本番運用ではRedisなどの外部ストレージでセッション管理が必要
-const transports = new Map<string, SSEServerTransport>();
-
-function checkAuth(req: VercelRequest): boolean {
+function checkAuth(req: NextApiRequest): boolean {
   const expectedKey = process.env.MCP_API_KEY;
   if (!expectedKey) return true;
-  // ヘッダーまたはクエリパラメータからAPIキーを取得
   const providedKey = req.headers["x-api-key"] || req.query.apiKey;
   return providedKey === expectedKey;
 }
 
-function setCORS(res: VercelResponse, req: VercelRequest) {
+function setCORS(res: NextApiResponse, req: NextApiRequest) {
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || ["*"];
   const origin = req.headers.origin || "*";
   const allowed = allowedOrigins.some((o) => o === "*" || origin === o);
@@ -28,8 +23,8 @@ function setCORS(res: VercelResponse, req: VercelRequest) {
 }
 
 export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse
+  req: NextApiRequest,
+  res: NextApiResponse
 ) {
   setCORS(res, req);
 
@@ -47,21 +42,36 @@ export default async function handler(
   }
 
   const sessionId = String(req.query.sessionId || "");
-  const transport = transports.get(sessionId);
+  const sessionManager = getSessionManager();
+
+  // まずメモリ内のtransportを確認
+  let transport = transports.get(sessionId);
+
+  // メモリにない場合、Redisでセッションの有効性を確認
+  if (!transport && sessionManager.isAvailable()) {
+    const session = await sessionManager.getSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: "Invalid session" });
+    }
+    // セッションは有効だが、transportがない = 別インスタンス
+    console.error(
+      `⚠️  Session ${sessionId} exists in Redis but not in memory (multi-instance scenario)`
+    );
+    return res.status(503).json({
+      error: "Service temporarily unavailable",
+      message: "Session exists but connection is on different instance",
+    });
+  }
 
   if (!transport) {
     return res.status(404).json({ error: "Invalid session" });
   }
 
   try {
-    // SSEServerTransportのhandlePostMessageを使用
     await transport.handlePostMessage(req as any, res as any);
   } catch (error) {
     console.error("Message handling error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
-
-// モジュールスコープでtransportsをエクスポート（同一プロセス内で共有）
-export { transports };
 

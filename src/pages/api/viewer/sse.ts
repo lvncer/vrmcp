@@ -1,9 +1,9 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { NextApiRequest, NextApiResponse } from "next";
 
 // ビューア用SSEクライアント管理
-const viewerClients = new Set<VercelResponse>();
+const viewerClients = new Set<NextApiResponse>();
 
-function setCORS(res: VercelResponse, req: VercelRequest) {
+function setCORS(res: NextApiResponse, req: NextApiRequest) {
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || ["*"];
   const origin = req.headers.origin || "*";
   const allowed = allowedOrigins.some((o) => o === "*" || origin === o);
@@ -17,8 +17,8 @@ function setCORS(res: VercelResponse, req: VercelRequest) {
 }
 
 export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse
+  req: NextApiRequest,
+  res: NextApiResponse
 ) {
   setCORS(res, req);
 
@@ -50,7 +50,7 @@ export default async function handler(
 
   // 心拍送信
   const heartbeat = setInterval(() => {
-    if (res.writable) {
+    if ((res as any).writable) {
       res.write(": ping\n\n");
     } else {
       clearInterval(heartbeat);
@@ -69,7 +69,7 @@ export default async function handler(
 export function broadcastToViewers(eventType: string, data: any) {
   const sseMessage = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
   viewerClients.forEach((client) => {
-    if (client.writable) {
+    if ((client as any).writable) {
       client.write(sseMessage);
     }
   });

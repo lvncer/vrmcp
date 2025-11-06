@@ -6,14 +6,15 @@
  * 
  * 使い方:
  * 1. 環境変数で設定:
- *    export MCP_REMOTE_URL="https://your-domain.vercel.app/api/mcp/sse"
+ *    export MCP_REMOTE_URL="https://your-domain.railway.app/api/mcp/sse"
  *    export MCP_API_KEY="your-api-key"
  * 
  * 2. Claude Desktopの設定に追加:
  *    "mcpServers": {
  *      "vrm": {
- *        "command": "node",
- *        "args": ["/path/to/gateway.js"]
+ *        "command": "npm",
+ *        "args": ["run", "gateway"],
+ *        "cwd": "/path/to/vrmcp"
  *      }
  *    }
  */
@@ -22,9 +23,8 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import fetch from "node-fetch";
 
-const REMOTE_URL = process.env.MCP_REMOTE_URL || "http://localhost:3000/mcp/sse";
+const REMOTE_URL = process.env.MCP_REMOTE_URL || "http://localhost:3000/api/mcp/sse";
 const API_KEY = process.env.MCP_API_KEY;
 
 class MCPGateway {
