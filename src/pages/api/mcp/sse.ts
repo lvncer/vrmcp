@@ -394,6 +394,16 @@ export default async function handler(
     const baseUrl = `${protocol}://${host}`;
     const messagesEndpoint = `${baseUrl}/api/mcp/messages`;
     
+    // SSEヘッダーを先に設定（重要！）
+    console.log("[MCP] Setting SSE headers...");
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no", // Nginxバッファリング無効化
+    });
+    console.log("[MCP] SSE headers set");
+    
     console.log(`[MCP] Creating SSE transport with endpoint: ${messagesEndpoint}`);
     const transport = new SSEServerTransport(messagesEndpoint, res as any);
     console.log(`[MCP] Transport created with sessionId: ${transport.sessionId}`);
