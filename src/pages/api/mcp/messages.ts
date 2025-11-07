@@ -4,9 +4,20 @@ import { getSessionManager } from "@/lib/redis-client";
 
 function checkAuth(req: NextApiRequest): boolean {
   const expectedKey = process.env.MCP_API_KEY;
-  if (!expectedKey) return true;
+  // ローカル開発環境では認証をスキップ
+  const isLocal = process.env.NODE_ENV === "development" && 
+                  (req.headers.host?.includes("localhost") || 
+                   req.headers.host?.includes("127.0.0.1"));
+  
+  if (!expectedKey || isLocal) {
+    console.log(`[MCP Messages] Auth check: ${!expectedKey ? "No API key configured" : "Local development mode"} - allowing access`);
+    return true;
+  }
+  
   const providedKey = req.headers["x-api-key"] || req.query.apiKey;
-  return providedKey === expectedKey;
+  const isAuthorized = providedKey === expectedKey;
+  console.log(`[MCP Messages] Auth check: ${isAuthorized ? "Authorized" : "Unauthorized"}`);
+  return isAuthorized;
 }
 
 function setCORS(res: NextApiResponse, req: NextApiRequest) {
@@ -44,18 +55,23 @@ export default async function handler(
   const sessionId = String(req.query.sessionId || "");
   const sessionManager = getSessionManager();
 
+  console.log(`[MCP Messages] Received POST message for session: ${sessionId}`);
+  console.log(`[MCP Messages] Available transports: ${Array.from(transports.keys()).join(', ') || 'none'}`);
+
   // まずメモリ内のtransportを確認
   let transport = transports.get(sessionId);
 
   // メモリにない場合、Redisでセッションの有効性を確認
   if (!transport && sessionManager.isAvailable()) {
+    console.log(`[MCP Messages] Transport not in memory, checking Redis for session: ${sessionId}`);
     const session = await sessionManager.getSession(sessionId);
     if (!session) {
+      console.error(`[MCP Messages] Session not found in Redis: ${sessionId}`);
       return res.status(404).json({ error: "Invalid session" });
     }
     // セッションは有効だが、transportがない = 別インスタンス
     console.error(
-      `⚠️  Session ${sessionId} exists in Redis but not in memory (multi-instance scenario)`
+      `[MCP Messages] ⚠️  Session ${sessionId} exists in Redis but not in memory (multi-instance scenario)`
     );
     return res.status(503).json({
       error: "Service temporarily unavailable",
@@ -64,13 +80,16 @@ export default async function handler(
   }
 
   if (!transport) {
+    console.error(`[MCP Messages] Transport not found for session: ${sessionId}`);
     return res.status(404).json({ error: "Invalid session" });
   }
 
+  console.log(`[MCP Messages] Processing message for session: ${sessionId}`);
   try {
     await transport.handlePostMessage(req as any, res as any);
+    console.log(`[MCP Messages] Message handled successfully for session: ${sessionId}`);
   } catch (error) {
-    console.error("Message handling error:", error);
+    console.error(`[MCP Messages] Message handling error for session ${sessionId}:`, error);
     return res.status(500).json({ error: "Internal server error" });
   }
 }

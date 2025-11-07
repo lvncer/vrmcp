@@ -47,9 +47,20 @@ function checkRateLimit(key: string): boolean {
 
 function checkAuth(req: NextApiRequest): boolean {
   const expectedKey = process.env.MCP_API_KEY;
-  if (!expectedKey) return true;
+  // ローカル開発環境では認証をスキップ
+  const isLocal = process.env.NODE_ENV === "development" && 
+                  (req.headers.host?.includes("localhost") || 
+                   req.headers.host?.includes("127.0.0.1"));
+  
+  if (!expectedKey || isLocal) {
+    console.log(`[MCP] Auth check: ${!expectedKey ? "No API key configured" : "Local development mode"} - allowing access`);
+    return true;
+  }
+  
   const providedKey = req.headers["x-api-key"] || req.query.apiKey;
-  return providedKey === expectedKey;
+  const isAuthorized = providedKey === expectedKey;
+  console.log(`[MCP] Auth check: ${isAuthorized ? "Authorized" : "Unauthorized"}`);
+  return isAuthorized;
 }
 
 function setCORS(res: NextApiResponse, req: NextApiRequest) {
@@ -68,6 +79,7 @@ function setCORS(res: NextApiResponse, req: NextApiRequest) {
 // MCPサーバー初期化（遅延初期化）
 function getOrCreateMCPServer(): Server {
   if (!mcpServer) {
+    console.log("[MCP] Creating new MCP server instance");
     mcpServer = new Server(
       {
         name: "vrm-mcp-server",
@@ -79,9 +91,12 @@ function getOrCreateMCPServer(): Server {
         },
       }
     );
+    console.log("[MCP] MCP server instance created");
 
     // ツール一覧を返す
-    mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
+    mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
+      console.log("[MCP] ListTools request received");
+      return {
       tools: [
         {
           name: "load_vrm_model",
@@ -249,11 +264,13 @@ function getOrCreateMCPServer(): Server {
           },
         },
       ],
-    }));
+    };
+    });
 
     // ツール実行ハンドラー
     mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
+      console.log(`[MCP] CallTool request received: ${name}`, args);
 
       // ビューアにブロードキャスト
       try {
@@ -351,15 +368,22 @@ export default async function handler(
   const sessionManager = getSessionManager();
 
   try {
+    console.log("[MCP] Getting or creating MCP server");
     const server = getOrCreateMCPServer();
+    
+    console.log("[MCP] Creating SSE transport");
     const transport = new SSEServerTransport("/api/mcp/messages", res as any);
+    console.log(`[MCP] Transport created with sessionId: ${transport.sessionId}`);
+    
     transports.set(transport.sessionId, transport);
+    console.log(`[MCP] Transport stored in map (total: ${transports.size})`);
 
     // Redisにセッション保存
     if (sessionManager.isAvailable()) {
       await sessionManager.saveSession(transport.sessionId, {
         metadata: { connectedAt: new Date().toISOString() },
       });
+      console.log(`[MCP] Session saved to Redis: ${transport.sessionId}`);
     }
 
     // クリーンアップ
@@ -368,11 +392,12 @@ export default async function handler(
       if (sessionManager.isAvailable()) {
         await sessionManager.deleteSession(transport.sessionId);
       }
-      console.log(`SSE client disconnected: ${transport.sessionId}`);
+      console.log(`[MCP] SSE client disconnected: ${transport.sessionId}`);
     });
 
+    console.log("[MCP] Connecting server to transport...");
     await server.connect(transport);
-    console.log(`SSE client connected: ${transport.sessionId}`);
+    console.log(`[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`);
 
     // 心拍送信 + セッション延長
     const heartbeat = setInterval(async () => {
