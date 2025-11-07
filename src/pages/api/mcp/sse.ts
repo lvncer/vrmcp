@@ -418,11 +418,7 @@ export default async function handler(
       console.log(`[MCP] SSE client disconnected: ${transport.sessionId}`);
     });
 
-    console.log("[MCP] Starting SSE transport (sends endpoint event)...");
-    await transport.start();
-    console.log(`[MCP] SSE transport started, endpoint event sent`);
-    
-    console.log("[MCP] Connecting server to transport...");
+    console.log("[MCP] Connecting server to transport (will auto-start and send endpoint event)...");
     console.log(`[MCP] Full messages URL: ${messagesEndpoint}?sessionId=${transport.sessionId}`);
     await server.connect(transport);
     console.log(`[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`);
