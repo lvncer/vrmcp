@@ -394,6 +394,16 @@ export default async function handler(
     const baseUrl = `${protocol}://${host}`;
     const messagesEndpoint = `${baseUrl}/api/mcp/messages`;
     
+    // SSEヘッダーを先に設定して送信
+    console.log("[MCP] Setting and flushing SSE headers...");
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.statusCode = 200;
+    res.flushHeaders(); // ヘッダーをクライアントに即座に送信
+    console.log("[MCP] SSE headers flushed");
+    
     console.log(`[MCP] Creating SSE transport with endpoint: ${messagesEndpoint}`);
     const transport = new SSEServerTransport(messagesEndpoint, res as any);
     console.log(`[MCP] Transport created with sessionId: ${transport.sessionId}`);
@@ -418,31 +428,20 @@ export default async function handler(
       console.log(`[MCP] SSE client disconnected: ${transport.sessionId}`);
     });
 
-    console.log("[MCP] Connecting server to transport (will auto-start and send endpoint event)...");
+    console.log("[MCP] Connecting server to transport...");
     console.log(`[MCP] Full messages URL: ${messagesEndpoint}?sessionId=${transport.sessionId}`);
     
-    // タイムアウト設定
-    const connectPromise = server.connect(transport);
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Connection timeout")), 10000)
-    );
-    
+    // ヘッダーは既に送信済みなので、server.connect()は安全に呼べるはず
     try {
-      await Promise.race([connectPromise, timeoutPromise]);
+      await server.connect(transport);
       console.log(`[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`);
-      
-      // デバッグ: 手動でendpointイベントを送信してみる
-      console.log(`[MCP] DEBUG: Manually sending endpoint event...`);
-      try {
-        res.write(`event: endpoint\n`);
-        res.write(`data: ${messagesEndpoint}?sessionId=${transport.sessionId}\n\n`);
-        console.log(`[MCP] DEBUG: Endpoint event sent`);
-      } catch (writeError) {
-        console.error(`[MCP] DEBUG: Failed to write endpoint event:`, writeError);
-      }
-    } catch (error) {
-      console.error(`[MCP] Connection failed:`, error);
-      throw error;
+    } catch (connectError) {
+      console.error(`[MCP] server.connect() failed:`, connectError);
+      // エラーでも続行（手動でendpointイベントを送る）
+      console.log(`[MCP] Sending endpoint event manually as fallback...`);
+      res.write(`event: endpoint\n`);
+      res.write(`data: ${messagesEndpoint}?sessionId=${transport.sessionId}\n\n`);
+      console.log(`[MCP] Fallback endpoint event sent`);
     }
 
     // 心拍送信 + セッション延長
