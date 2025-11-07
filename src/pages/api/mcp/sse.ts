@@ -394,16 +394,6 @@ export default async function handler(
     const baseUrl = `${protocol}://${host}`;
     const messagesEndpoint = `${baseUrl}/api/mcp/messages`;
     
-    // SSEヘッダーを先に設定（重要！）
-    console.log("[MCP] Setting SSE headers...");
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      "Connection": "keep-alive",
-      "X-Accel-Buffering": "no", // Nginxバッファリング無効化
-    });
-    console.log("[MCP] SSE headers set");
-    
     console.log(`[MCP] Creating SSE transport with endpoint: ${messagesEndpoint}`);
     const transport = new SSEServerTransport(messagesEndpoint, res as any);
     console.log(`[MCP] Transport created with sessionId: ${transport.sessionId}`);
@@ -430,8 +420,20 @@ export default async function handler(
 
     console.log("[MCP] Connecting server to transport (will auto-start and send endpoint event)...");
     console.log(`[MCP] Full messages URL: ${messagesEndpoint}?sessionId=${transport.sessionId}`);
-    await server.connect(transport);
-    console.log(`[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`);
+    
+    // タイムアウト設定
+    const connectPromise = server.connect(transport);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Connection timeout")), 10000)
+    );
+    
+    try {
+      await Promise.race([connectPromise, timeoutPromise]);
+      console.log(`[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`);
+    } catch (error) {
+      console.error(`[MCP] Connection failed:`, error);
+      throw error;
+    }
 
     // 心拍送信 + セッション延長
     const heartbeat = setInterval(async () => {
