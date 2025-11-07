@@ -387,8 +387,15 @@ export default async function handler(
     console.log("[MCP] Getting or creating MCP server");
     const server = getOrCreateMCPServer();
     
-    console.log("[MCP] Creating SSE transport");
-    const transport = new SSEServerTransport("/api/mcp/messages", res as any);
+    // 完全なURLを構築（Railway等の外部環境対応）
+    const host = req.headers.host || "localhost:3000";
+    const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+    const protocol = req.headers["x-forwarded-proto"] || (isLocalhost ? "http" : "https");
+    const baseUrl = `${protocol}://${host}`;
+    const messagesEndpoint = `${baseUrl}/api/mcp/messages`;
+    
+    console.log(`[MCP] Creating SSE transport with endpoint: ${messagesEndpoint}`);
+    const transport = new SSEServerTransport(messagesEndpoint, res as any);
     console.log(`[MCP] Transport created with sessionId: ${transport.sessionId}`);
     
     transports.set(transport.sessionId, transport);
@@ -412,13 +419,7 @@ export default async function handler(
     });
 
     console.log("[MCP] Connecting server to transport...");
-    console.log(`[MCP] Messages endpoint will be: /api/mcp/messages?sessionId=${transport.sessionId}`);
-    
-    // 手動でendpointイベントを送信（デバッグ用）
-    const endpointUrl = `/api/mcp/messages?sessionId=${transport.sessionId}`;
-    console.log(`[MCP] Manually sending endpoint event: ${endpointUrl}`);
-    res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
-    
+    console.log(`[MCP] Full messages URL: ${messagesEndpoint}?sessionId=${transport.sessionId}`);
     await server.connect(transport);
     console.log(`[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`);
 
