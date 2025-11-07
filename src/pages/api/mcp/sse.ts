@@ -4,6 +4,7 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ErrorCode,
+  InitializeRequestSchema,
   ListToolsRequestSchema,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -92,6 +93,21 @@ function getOrCreateMCPServer(): Server {
       }
     );
     console.log("[MCP] MCP server instance created");
+
+    // Initialize ハンドラー
+    mcpServer.setRequestHandler(InitializeRequestSchema, async (request) => {
+      console.log("[MCP] Initialize request received", request.params);
+      return {
+        protocolVersion: request.params.protocolVersion,
+        capabilities: {
+          tools: {},
+        },
+        serverInfo: {
+          name: "vrm-mcp-server",
+          version: "0.1.0",
+        },
+      };
+    });
 
     // ツール一覧を返す
     mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
