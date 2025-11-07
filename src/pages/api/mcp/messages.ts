@@ -2,6 +2,13 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { transports } from "./sse";
 import { getSessionManager } from "@/lib/redis-client";
 
+// Next.jsのbodyパーサーを無効化（SSEServerTransportが生のストリームを必要とするため）
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 function checkAuth(req: NextApiRequest): boolean {
   const expectedKey = process.env.MCP_API_KEY;
   // ローカル開発環境では認証をスキップ
