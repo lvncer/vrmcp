@@ -74,6 +74,14 @@ export default async function handler(
   // まずメモリ内のtransportを確認
   let transport = transports.get(sessionId);
 
+  // 短時間リトライ（メモリ反映のレース回避）
+  if (!transport) {
+    for (let i = 0; i < 6 && !transport; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      transport = transports.get(sessionId);
+    }
+  }
+
   // メモリにない場合、Redisでセッションの有効性を確認
   if (!transport && sessionManager.isAvailable()) {
     console.log(`[MCP Messages] Transport not in memory, checking Redis for session: ${sessionId}`);
@@ -82,14 +90,20 @@ export default async function handler(
       console.error(`[MCP Messages] Session not found in Redis: ${sessionId}`);
       return res.status(404).json({ error: "Invalid session" });
     }
-    // セッションは有効だが、transportがない = 別インスタンス
-    console.error(
-      `[MCP Messages] ⚠️  Session ${sessionId} exists in Redis but not in memory (multi-instance scenario)`
-    );
-    return res.status(503).json({
-      error: "Service temporarily unavailable",
-      message: "Session exists but connection is on different instance",
-    });
+    // セッションは有効だが、transportがまだメモリに反映されていない可能性があるため待つ
+    for (let i = 0; i < 10 && !transport; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      transport = transports.get(sessionId);
+    }
+    if (!transport) {
+      console.error(
+        `[MCP Messages] ⚠️  Session ${sessionId} exists but transport not in memory after wait (different worker)`
+      );
+      return res.status(503).json({
+        error: "Service temporarily unavailable",
+        message: "Session exists but connection is on different worker",
+      });
+    }
   }
 
   if (!transport) {

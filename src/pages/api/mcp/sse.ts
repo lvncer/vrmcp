@@ -431,53 +431,10 @@ export default async function handler(
       console.log(`[MCP] SSE client disconnected: ${transport.sessionId}`);
     });
 
-    // transport.start()を手動で呼ぶ（ヘッダー送信 + endpoint イベント送信 + _sseResponse設定）
-    console.log(`[MCP] Starting SSE transport...`);
-    console.log(`[MCP] DEBUG: Will send endpoint event to: ${messagesEndpoint}?sessionId=${transport.sessionId}`);
-    await transport.start();
-    console.log(`[MCP] SSE transport started, endpoint event sent`);
-    console.log(`[MCP] DEBUG: Endpoint URL sent to client: ${messagesEndpoint}?sessionId=${transport.sessionId}`);
-
-    // server.connect()をtry-catchで囲む（既にstartされているのでエラーを無視）
-    console.log(
-      `[MCP] Connecting server to transport (may fail with 'already started')...`
-    );
-    let serverConnected = false;
-    try {
-      await server.connect(transport);
-      console.log(`[MCP] Server connected to transport successfully`);
-      serverConnected = true;
-    } catch (connectError: any) {
-      if (
-        connectError.message &&
-        connectError.message.includes("already started")
-      ) {
-        console.log(
-          `[MCP] Transport already started, setting up manual handlers...`
-        );
-        // server.connect()が失敗したので、手動でハンドラーを設定
-        transport.onmessage = async (message) => {
-          console.log(`[MCP] Transport received message (manual):`, JSON.stringify(message).substring(0, 150));
-          // Serverオブジェクトの内部メソッドにアクセス
-          // @ts-ignore
-          if (typeof server._handleRequest === 'function') {
-            // @ts-ignore
-            const response = await server._handleRequest(message);
-            if (response) {
-              await transport.send(response);
-            }
-          }
-        };
-        console.log(`[MCP] Manual message handler configured`);
-      } else {
-        console.error(`[MCP] Unexpected server.connect() error:`, connectError);
-        throw connectError;
-      }
-    }
-
-    console.log(
-      `[MCP] ✅ SSE client connected successfully (${serverConnected ? 'auto' : 'manual'}): ${transport.sessionId}`
-    );
+    // SDKに任せて接続・初期化（ヘッダー・endpointイベントは内部で送信）
+    console.log(`[MCP] Connecting server to transport...`);
+    await server.connect(transport);
+    console.log(`[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`);
 
     // 心拍送信 + セッション延長
     const heartbeat = setInterval(async () => {
