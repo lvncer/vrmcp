@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type * as THREE from "three";
+import type { VRM } from "@pixiv/three-vrm";
 
 export default function ViewerPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
