@@ -412,6 +412,13 @@ export default async function handler(
     });
 
     console.log("[MCP] Connecting server to transport...");
+    console.log(`[MCP] Messages endpoint will be: /api/mcp/messages?sessionId=${transport.sessionId}`);
+    
+    // 手動でendpointイベントを送信（デバッグ用）
+    const endpointUrl = `/api/mcp/messages?sessionId=${transport.sessionId}`;
+    console.log(`[MCP] Manually sending endpoint event: ${endpointUrl}`);
+    res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
+    
     await server.connect(transport);
     console.log(`[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`);
 

@@ -85,11 +85,15 @@ export default async function handler(
   }
 
   console.log(`[MCP Messages] Processing message for session: ${sessionId}`);
+  console.log(`[MCP Messages] Request body:`, JSON.stringify(req.body));
   try {
     await transport.handlePostMessage(req as any, res as any);
     console.log(`[MCP Messages] Message handled successfully for session: ${sessionId}`);
   } catch (error) {
     console.error(`[MCP Messages] Message handling error for session ${sessionId}:`, error);
+    if (error instanceof Error) {
+      console.error(`[MCP Messages] Error stack:`, error.stack);
+    }
     return res.status(500).json({ error: "Internal server error" });
   }
 }
