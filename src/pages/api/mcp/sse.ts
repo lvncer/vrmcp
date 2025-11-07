@@ -49,18 +49,25 @@ function checkRateLimit(key: string): boolean {
 function checkAuth(req: NextApiRequest): boolean {
   const expectedKey = process.env.MCP_API_KEY;
   // ローカル開発環境では認証をスキップ
-  const isLocal = process.env.NODE_ENV === "development" && 
-                  (req.headers.host?.includes("localhost") || 
-                   req.headers.host?.includes("127.0.0.1"));
-  
+  const isLocal =
+    process.env.NODE_ENV === "development" &&
+    (req.headers.host?.includes("localhost") ||
+      req.headers.host?.includes("127.0.0.1"));
+
   if (!expectedKey || isLocal) {
-    console.log(`[MCP] Auth check: ${!expectedKey ? "No API key configured" : "Local development mode"} - allowing access`);
+    console.log(
+      `[MCP] Auth check: ${
+        !expectedKey ? "No API key configured" : "Local development mode"
+      } - allowing access`
+    );
     return true;
   }
-  
+
   const providedKey = req.headers["x-api-key"] || req.query.apiKey;
   const isAuthorized = providedKey === expectedKey;
-  console.log(`[MCP] Auth check: ${isAuthorized ? "Authorized" : "Unauthorized"}`);
+  console.log(
+    `[MCP] Auth check: ${isAuthorized ? "Authorized" : "Unauthorized"}`
+  );
   return isAuthorized;
 }
 
@@ -113,174 +120,174 @@ function getOrCreateMCPServer(): Server {
     mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
       console.log("[MCP] ListTools request received");
       return {
-      tools: [
-        {
-          name: "load_vrm_model",
-          description: "VRMモデルファイルを読み込む",
-          inputSchema: {
-            type: "object",
-            properties: {
-              filePath: {
-                type: "string",
-                description:
-                  "VRMファイル名（例: character.vrm）環境変数 VRM_MODELS_DIR からの相対パス",
-              },
-            },
-            required: ["filePath"],
-          },
-        },
-        {
-          name: "set_vrm_expression",
-          description: "VRMモデルの表情を設定する",
-          inputSchema: {
-            type: "object",
-            properties: {
-              expression: {
-                type: "string",
-                description:
-                  "設定する表情（例: happy, angry, sad, surprised, neutral）",
-              },
-              weight: {
-                type: "number",
-                minimum: 0,
-                maximum: 1,
-                description: "表情の強さ (0.0-1.0)",
-              },
-            },
-            required: ["expression", "weight"],
-          },
-        },
-        {
-          name: "set_vrm_pose",
-          description: "VRMモデルの位置と回転を設定する",
-          inputSchema: {
-            type: "object",
-            properties: {
-              position: {
-                type: "object",
-                properties: {
-                  x: { type: "number" },
-                  y: { type: "number" },
-                  z: { type: "number" },
+        tools: [
+          {
+            name: "load_vrm_model",
+            description: "VRMモデルファイルを読み込む",
+            inputSchema: {
+              type: "object",
+              properties: {
+                filePath: {
+                  type: "string",
+                  description:
+                    "VRMファイル名（例: character.vrm）環境変数 VRM_MODELS_DIR からの相対パス",
                 },
-                description: "モデルの位置",
               },
-              rotation: {
-                type: "object",
-                properties: {
-                  x: { type: "number", description: "ラジアン" },
-                  y: { type: "number", description: "ラジアン" },
-                  z: { type: "number", description: "ラジアン" },
+              required: ["filePath"],
+            },
+          },
+          {
+            name: "set_vrm_expression",
+            description: "VRMモデルの表情を設定する",
+            inputSchema: {
+              type: "object",
+              properties: {
+                expression: {
+                  type: "string",
+                  description:
+                    "設定する表情（例: happy, angry, sad, surprised, neutral）",
                 },
-                description: "モデルの回転",
-              },
-            },
-          },
-        },
-        {
-          name: "animate_vrm_bone",
-          description: "指定されたボーンを回転させる",
-          inputSchema: {
-            type: "object",
-            properties: {
-              boneName: {
-                type: "string",
-                description:
-                  "ボーン名（例: leftUpperArm, rightUpperArm, head, spine）",
-              },
-              rotation: {
-                type: "object",
-                properties: {
-                  x: { type: "number" },
-                  y: { type: "number" },
-                  z: { type: "number" },
-                  w: { type: "number" },
+                weight: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: 1,
+                  description: "表情の強さ (0.0-1.0)",
                 },
-                description: "クォータニオン回転",
               },
-            },
-            required: ["boneName", "rotation"],
-          },
-        },
-        {
-          name: "get_vrm_status",
-          description: "VRMモデルの現在の状態を取得する",
-          inputSchema: {
-            type: "object",
-            properties: {},
-          },
-        },
-        {
-          name: "list_vrm_files",
-          description:
-            "利用可能なVRMモデルとVRMAアニメーションファイルの一覧を取得する",
-          inputSchema: {
-            type: "object",
-            properties: {
-              type: {
-                type: "string",
-                enum: ["models", "animations", "all"],
-                description: "取得するファイルの種類（デフォルト: all）",
-              },
+              required: ["expression", "weight"],
             },
           },
-        },
-        {
-          name: "load_vrma_animation",
-          description: "VRMAファイルからアニメーションを読み込む",
-          inputSchema: {
-            type: "object",
-            properties: {
-              animationPath: {
-                type: "string",
-                description:
-                  "VRMAファイル名（例: greeting.vrma）環境変数 VRMA_ANIMATIONS_DIR からの相対パス",
-              },
-              animationName: {
-                type: "string",
-                description: "アニメーション識別名（再生時に使用）",
-              },
-            },
-            required: ["animationPath", "animationName"],
-          },
-        },
-        {
-          name: "play_vrma_animation",
-          description: "読み込み済みのVRMAアニメーションを再生する",
-          inputSchema: {
-            type: "object",
-            properties: {
-              animationName: {
-                type: "string",
-                description: "再生するアニメーション名",
-              },
-              loop: {
-                type: "boolean",
-                description: "ループ再生するか",
-              },
-              fadeInDuration: {
-                type: "number",
-                description: "フェードイン時間（秒）",
-              },
-            },
-            required: ["animationName"],
-          },
-        },
-        {
-          name: "stop_vrma_animation",
-          description: "再生中のVRMAアニメーションを停止する",
-          inputSchema: {
-            type: "object",
-            properties: {
-              fadeOutDuration: {
-                type: "number",
-                description: "フェードアウト時間（秒）",
+          {
+            name: "set_vrm_pose",
+            description: "VRMモデルの位置と回転を設定する",
+            inputSchema: {
+              type: "object",
+              properties: {
+                position: {
+                  type: "object",
+                  properties: {
+                    x: { type: "number" },
+                    y: { type: "number" },
+                    z: { type: "number" },
+                  },
+                  description: "モデルの位置",
+                },
+                rotation: {
+                  type: "object",
+                  properties: {
+                    x: { type: "number", description: "ラジアン" },
+                    y: { type: "number", description: "ラジアン" },
+                    z: { type: "number", description: "ラジアン" },
+                  },
+                  description: "モデルの回転",
+                },
               },
             },
           },
-        },
-      ],
-    };
+          {
+            name: "animate_vrm_bone",
+            description: "指定されたボーンを回転させる",
+            inputSchema: {
+              type: "object",
+              properties: {
+                boneName: {
+                  type: "string",
+                  description:
+                    "ボーン名（例: leftUpperArm, rightUpperArm, head, spine）",
+                },
+                rotation: {
+                  type: "object",
+                  properties: {
+                    x: { type: "number" },
+                    y: { type: "number" },
+                    z: { type: "number" },
+                    w: { type: "number" },
+                  },
+                  description: "クォータニオン回転",
+                },
+              },
+              required: ["boneName", "rotation"],
+            },
+          },
+          {
+            name: "get_vrm_status",
+            description: "VRMモデルの現在の状態を取得する",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
+          {
+            name: "list_vrm_files",
+            description:
+              "利用可能なVRMモデルとVRMAアニメーションファイルの一覧を取得する",
+            inputSchema: {
+              type: "object",
+              properties: {
+                type: {
+                  type: "string",
+                  enum: ["models", "animations", "all"],
+                  description: "取得するファイルの種類（デフォルト: all）",
+                },
+              },
+            },
+          },
+          {
+            name: "load_vrma_animation",
+            description: "VRMAファイルからアニメーションを読み込む",
+            inputSchema: {
+              type: "object",
+              properties: {
+                animationPath: {
+                  type: "string",
+                  description:
+                    "VRMAファイル名（例: greeting.vrma）環境変数 VRMA_ANIMATIONS_DIR からの相対パス",
+                },
+                animationName: {
+                  type: "string",
+                  description: "アニメーション識別名（再生時に使用）",
+                },
+              },
+              required: ["animationPath", "animationName"],
+            },
+          },
+          {
+            name: "play_vrma_animation",
+            description: "読み込み済みのVRMAアニメーションを再生する",
+            inputSchema: {
+              type: "object",
+              properties: {
+                animationName: {
+                  type: "string",
+                  description: "再生するアニメーション名",
+                },
+                loop: {
+                  type: "boolean",
+                  description: "ループ再生するか",
+                },
+                fadeInDuration: {
+                  type: "number",
+                  description: "フェードイン時間（秒）",
+                },
+              },
+              required: ["animationName"],
+            },
+          },
+          {
+            name: "stop_vrma_animation",
+            description: "再生中のVRMAアニメーションを停止する",
+            inputSchema: {
+              type: "object",
+              properties: {
+                fadeOutDuration: {
+                  type: "number",
+                  description: "フェードアウト時間（秒）",
+                },
+              },
+            },
+          },
+        ],
+      };
     });
 
     // ツール実行ハンドラー
@@ -386,28 +393,24 @@ export default async function handler(
   try {
     console.log("[MCP] Getting or creating MCP server");
     const server = getOrCreateMCPServer();
-    
+
     // 完全なURLを構築（Railway等の外部環境対応）
     const host = req.headers.host || "localhost:3000";
-    const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
-    const protocol = req.headers["x-forwarded-proto"] || (isLocalhost ? "http" : "https");
+    const isLocalhost =
+      host.includes("localhost") || host.includes("127.0.0.1");
+    const protocol =
+      req.headers["x-forwarded-proto"] || (isLocalhost ? "http" : "https");
     const baseUrl = `${protocol}://${host}`;
     const messagesEndpoint = `${baseUrl}/api/mcp/messages`;
-    
-    // SSEヘッダーを先に設定して送信
-    console.log("[MCP] Setting and flushing SSE headers...");
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-    res.statusCode = 200;
-    res.flushHeaders(); // ヘッダーをクライアントに即座に送信
-    console.log("[MCP] SSE headers flushed");
-    
-    console.log(`[MCP] Creating SSE transport with endpoint: ${messagesEndpoint}`);
+
+    console.log(
+      `[MCP] Creating SSE transport with endpoint: ${messagesEndpoint}`
+    );
     const transport = new SSEServerTransport(messagesEndpoint, res as any);
-    console.log(`[MCP] Transport created with sessionId: ${transport.sessionId}`);
-    
+    console.log(
+      `[MCP] Transport created with sessionId: ${transport.sessionId}`
+    );
+
     transports.set(transport.sessionId, transport);
     console.log(`[MCP] Transport stored in map (total: ${transports.size})`);
 
@@ -428,21 +431,35 @@ export default async function handler(
       console.log(`[MCP] SSE client disconnected: ${transport.sessionId}`);
     });
 
-    console.log("[MCP] Connecting server to transport...");
-    console.log(`[MCP] Full messages URL: ${messagesEndpoint}?sessionId=${transport.sessionId}`);
-    
-    // ヘッダーは既に送信済みなので、server.connect()は安全に呼べるはず
+    // transport.start()を手動で呼ぶ（ヘッダー送信 + endpoint イベント送信 + _sseResponse設定）
+    console.log(`[MCP] Starting SSE transport...`);
+    await transport.start();
+    console.log(`[MCP] SSE transport started, endpoint event sent`);
+
+    // server.connect()をtry-catchで囲む（既にstartされているのでエラーを無視）
+    console.log(
+      `[MCP] Connecting server to transport (may fail with 'already started')...`
+    );
     try {
       await server.connect(transport);
-      console.log(`[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`);
-    } catch (connectError) {
-      console.error(`[MCP] server.connect() failed:`, connectError);
-      // エラーでも続行（手動でendpointイベントを送る）
-      console.log(`[MCP] Sending endpoint event manually as fallback...`);
-      res.write(`event: endpoint\n`);
-      res.write(`data: ${messagesEndpoint}?sessionId=${transport.sessionId}\n\n`);
-      console.log(`[MCP] Fallback endpoint event sent`);
+      console.log(`[MCP] Server connected to transport successfully`);
+    } catch (connectError: any) {
+      if (
+        connectError.message &&
+        connectError.message.includes("already started")
+      ) {
+        console.log(
+          `[MCP] Transport already started (expected), connection should still work`
+        );
+      } else {
+        console.error(`[MCP] Unexpected server.connect() error:`, connectError);
+        throw connectError;
+      }
     }
+
+    console.log(
+      `[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`
+    );
 
     // 心拍送信 + セッション延長
     const heartbeat = setInterval(async () => {
@@ -465,4 +482,3 @@ export default async function handler(
 
 // transportsをエクスポート（messages.tsで使用）
 export { transports };
-
