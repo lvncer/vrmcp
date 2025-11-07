@@ -430,6 +430,16 @@ export default async function handler(
     try {
       await Promise.race([connectPromise, timeoutPromise]);
       console.log(`[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`);
+      
+      // デバッグ: 手動でendpointイベントを送信してみる
+      console.log(`[MCP] DEBUG: Manually sending endpoint event...`);
+      try {
+        res.write(`event: endpoint\n`);
+        res.write(`data: ${messagesEndpoint}?sessionId=${transport.sessionId}\n\n`);
+        console.log(`[MCP] DEBUG: Endpoint event sent`);
+      } catch (writeError) {
+        console.error(`[MCP] DEBUG: Failed to write endpoint event:`, writeError);
+      }
     } catch (error) {
       console.error(`[MCP] Connection failed:`, error);
       throw error;
