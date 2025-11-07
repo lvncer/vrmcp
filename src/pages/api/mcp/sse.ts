@@ -440,17 +440,33 @@ export default async function handler(
     console.log(
       `[MCP] Connecting server to transport (may fail with 'already started')...`
     );
+    let serverConnected = false;
     try {
       await server.connect(transport);
       console.log(`[MCP] Server connected to transport successfully`);
+      serverConnected = true;
     } catch (connectError: any) {
       if (
         connectError.message &&
         connectError.message.includes("already started")
       ) {
         console.log(
-          `[MCP] Transport already started (expected), connection should still work`
+          `[MCP] Transport already started, setting up manual handlers...`
         );
+        // server.connect()が失敗したので、手動でハンドラーを設定
+        transport.onmessage = async (message) => {
+          console.log(`[MCP] Transport received message (manual):`, JSON.stringify(message).substring(0, 150));
+          // Serverオブジェクトの内部メソッドにアクセス
+          // @ts-ignore
+          if (typeof server._handleRequest === 'function') {
+            // @ts-ignore
+            const response = await server._handleRequest(message);
+            if (response) {
+              await transport.send(response);
+            }
+          }
+        };
+        console.log(`[MCP] Manual message handler configured`);
       } else {
         console.error(`[MCP] Unexpected server.connect() error:`, connectError);
         throw connectError;
@@ -458,7 +474,7 @@ export default async function handler(
     }
 
     console.log(
-      `[MCP] ✅ SSE client connected successfully: ${transport.sessionId}`
+      `[MCP] ✅ SSE client connected successfully (${serverConnected ? 'auto' : 'manual'}): ${transport.sessionId}`
     );
 
     // 心拍送信 + セッション延長
