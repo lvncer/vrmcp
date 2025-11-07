@@ -37,18 +37,24 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  console.log(`[MCP Messages] Request received: ${req.method} ${req.url}`);
+  console.log(`[MCP Messages] Headers:`, JSON.stringify(req.headers, null, 2));
+  
   setCORS(res, req);
 
   if (req.method === "OPTIONS") {
+    console.log(`[MCP Messages] OPTIONS request handled`);
     return res.status(200).end();
   }
 
   if (req.method !== "POST") {
+    console.log(`[MCP Messages] Method not allowed: ${req.method}`);
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   // 認証チェック
   if (!checkAuth(req)) {
+    console.log(`[MCP Messages] Unauthorized request`);
     return res.status(401).json({ error: "Unauthorized" });
   }
 

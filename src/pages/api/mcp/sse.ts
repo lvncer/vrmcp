@@ -433,8 +433,10 @@ export default async function handler(
 
     // transport.start()を手動で呼ぶ（ヘッダー送信 + endpoint イベント送信 + _sseResponse設定）
     console.log(`[MCP] Starting SSE transport...`);
+    console.log(`[MCP] DEBUG: Will send endpoint event to: ${messagesEndpoint}?sessionId=${transport.sessionId}`);
     await transport.start();
     console.log(`[MCP] SSE transport started, endpoint event sent`);
+    console.log(`[MCP] DEBUG: Endpoint URL sent to client: ${messagesEndpoint}?sessionId=${transport.sessionId}`);
 
     // server.connect()をtry-catchで囲む（既にstartされているのでエラーを無視）
     console.log(
