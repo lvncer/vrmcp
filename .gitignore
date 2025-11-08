@@ -22,11 +22,5 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# User files (examples)
-public/models/*.vrm
-public/animations/*.vrma
-!public/models/.gitkeep
-!public/animations/.gitkeep
-
 # AI Setting files
 .cursor/
