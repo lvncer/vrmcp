@@ -1,7 +1,5 @@
 # VRMCP (VRM MCP Server)
 
-**作成日**: 2025/10/19
-
 VRM モデルを AI が自然言語で制御できる MCP サーバー。
 Claude Desktop から自然言語で指示するだけで、Web ブラウザで VRM モデルがリアルタイムに動きます。
 
@@ -9,23 +7,18 @@ Claude Desktop から自然言語で指示するだけで、Web ブラウザで 
 
 - **自然言語制御**: 「嬉しい表情で手を振って」→ AI が自動的にツールを呼び出し
 - **VRMA アニメーション対応**: VRMA ファイルの読み込み・再生（ループ・フェード対応）
-- **リアルタイム**: SSE（Server-Sent Events）で低遅延通信
-- **リモート対応**: Vercelにデプロイして、どこからでもアクセス可能
-- **セキュリティ**: APIキー認証、CORS、レート制限を標準実装
-- **柔軟な配置**: 環境変数で VRM/VRMA ファイルの場所を自由に設定
-- **ブラウザレンダリング**: Three.js でスムーズな 60FPS 描画
 
 ## セットアップ
 
-### 📌 セットアップ方法の選択
+### セットアップ方法の選択
 
 このプロジェクトは2つの運用モードをサポートしています：
 
 1. **ローカルモード**: ローカル環境でMCPサーバーを起動（従来の方法）
-   - 👉 [ローカルセットアップガイド](./documents/SETUP.md)
+   - [ローカルセットアップガイド](./documents/SETUP.md)
 
 2. **リモートモード**: Vercelにデプロイして、どこからでもアクセス（推奨）
-   - 👉 [リモートセットアップガイド](./documents/REMOTE_SETUP.md)
+   - [リモートセットアップガイド](./documents/REMOTE_SETUP.md)
 
 以下は、ローカルモードのクイックスタートです。
 
@@ -176,32 +169,6 @@ vrm-mcp/
 ├── package.json
 ├── tsconfig.json
 └── README.md
-```
-
-## テスト
-
-### ローカルでのSSE接続テスト
-
-```bash
-# サーバーを起動
-npm run dev
-
-# 別のターミナルでテストスクリプトを実行
-./test-sse.sh
-```
-
-### 手動テスト
-
-```bash
-# MCP SSEエンドポイント
-curl -N -H "Accept: text/event-stream" http://localhost:3000/mcp/sse
-
-# Viewer SSEエンドポイント
-curl -N -H "Accept: text/event-stream" http://localhost:3000/viewer/sse
-
-# APIキー認証テスト（MCP_API_KEY設定時）
-curl -N -H "x-api-key: your-key" -H "Accept: text/event-stream" \
-  http://localhost:3000/mcp/sse
 ```
 
 ## 環境変数

@@ -1,12 +1,12 @@
 # Redis セッション管理セットアップガイド
 
-VRM MCPサーバーをリモート環境（Railway等）で動かす場合、複数インスタンス間でセッション情報を共有するためにRedisを使用します。
+VRM MCP サーバーをリモート環境（Railway 等）で動かす場合、複数インスタンス間でセッション情報を共有するために Redis を使用します。
 
-## なぜRedisが必要？
+## なぜ Redis が必要？
 
 ### 問題: ステートレス環境でのセッション喪失
 
-```
+```text
 ┌─────────────┐  GET /mcp/sse      ┌──────────────┐
 │   Client    │ ──────────────────▶│  Instance A  │
 └─────────────┘                    │  (sessionId  │
@@ -20,9 +20,9 @@ VRM MCPサーバーをリモート環境（Railway等）で動かす場合、複
                                    └──────────────┘
 ```
 
-### 解決: Redisで共有ストレージ
+### 解決: Redis で共有ストレージ
 
-```
+```text
 ┌─────────────┐  GET /mcp/sse      ┌──────────────┐
 │   Client    │ ──────────────────▶│  Instance A  │
 └─────────────┘                    │  ↓ 保存      │
@@ -43,10 +43,10 @@ VRM MCPサーバーをリモート環境（Railway等）で動かす場合、複
 
 ## セットアップ手順
 
-### Step 1: Upstash Redisアカウント作成
+### Step 1: Upstash Redis アカウント作成
 
-1. **https://upstash.com/** にアクセス
-2. **Sign Up** → GitHubアカウントで登録（無料）
+1. [https://upstash.com/](https://upstash.com/) にアクセス
+2. **Sign Up** → GitHub アカウントで登録（無料）
 3. ダッシュボードにログイン
 
 ### Step 2: Redis データベース作成
@@ -67,7 +67,8 @@ VRM MCPサーバーをリモート環境（Railway等）で動かす場合、複
 
 1. **REST API** タブをクリック
 2. 以下をコピー：
-   ```
+
+   ```sh
    UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
    UPSTASH_REDIS_REST_TOKEN=AXXXyyyyyzzzzz==
    ```
@@ -91,6 +92,7 @@ export ALLOWED_ORIGINS="http://localhost:3000"
 ```
 
 反映：
+
 ```bash
 source ~/.zshrc
 # または
@@ -99,14 +101,14 @@ source .env
 
 ### Railway
 
-1. Railwayダッシュボードでプロジェクトを開く
+1. Railway ダッシュボードでプロジェクトを開く
 2. **Variables** タブをクリック
 3. **New Variable** で以下を追加：
 
-```
-UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
-UPSTASH_REDIS_REST_TOKEN=AXXXyyyyyzzzzz==
-```
+   ```sh
+   UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
+   UPSTASH_REDIS_REST_TOKEN=AXXXyyyyyzzzzz==
+   ```
 
 4. **Deploy** をクリックして再デプロイ
 
@@ -121,18 +123,20 @@ UPSTASH_REDIS_REST_TOKEN=AXXXyyyyyzzzzz==
 npm run dev
 ```
 
-ログに以下が表示されればOK:
-```
+ログに以下が表示されれば OK:
+
+```sh
 ✓ Redis session manager initialized
 Redis Sessions: ENABLED
 ```
 
-### 2. Redisへの接続確認
+### 2. Redis への接続確認
 
-Upstashダッシュボードで：
+Upstash ダッシュボードで：
+
 - **Data Browser** を開く
 - キー `mcp:session:*` が作成されているか確認
-- SSE接続すると自動的にキーが追加される
+- SSE 接続すると自動的にキーが追加される
 
 ### 3. セッション情報の確認
 
@@ -141,18 +145,19 @@ Upstashダッシュボードで：
 curl -N "http://localhost:3000/mcp/sse?apiKey=YOUR_KEY"
 ```
 
-別のターミナルで、Upstash Data Browserを確認：
-```
+別のターミナルで、Upstash Data Browser を確認：
+
+```sh
 mcp:session:177b4a80-105b-40b9-bf53-4976d61ac58c
 ```
 
 ---
 
-## Redis設定の詳細
+## Redis 設定の詳細
 
 ### セッション有効期限
 
-デフォルト: **1時間（3600秒）**
+デフォルト: **1 時間（3600 秒）**
 
 変更したい場合、`src/redis-client.ts` の `SESSION_TTL` を編集：
 
@@ -162,7 +167,7 @@ private readonly SESSION_TTL = 3600; // 秒単位
 
 ### 自動延長
 
-心拍（30秒ごと）でセッションが自動延長されます：
+心拍（30 秒ごと）でセッションが自動延長されます：
 
 ```typescript
 // src/mcp-server.ts
@@ -177,7 +182,7 @@ const heartbeat = setInterval(async () => {
 
 ### クリーンアップ
 
-Redis側で自動的に期限切れキーを削除（`ex` オプション使用）：
+Redis 側で自動的に期限切れキーを削除（`ex` オプション使用）：
 
 ```typescript
 await redis.set(key, value, { ex: this.SESSION_TTL });
@@ -187,11 +192,12 @@ await redis.set(key, value, { ex: this.SESSION_TTL });
 
 ## トラブルシューティング
 
-### Redis接続エラー
+### Redis 接続エラー
 
 **症状**: `Redis session manager` が初期化されない
 
 **確認**:
+
 ```bash
 echo $UPSTASH_REDIS_REST_URL
 echo $UPSTASH_REDIS_REST_TOKEN
@@ -200,50 +206,55 @@ echo $UPSTASH_REDIS_REST_TOKEN
 両方とも値が表示されるか確認。
 
 **解決**:
-- 環境変数が正しく設定されているか
-- Upstashダッシュボードで正しいURLとトークンをコピーしたか
-- Railway等の場合、Variables設定後に再デプロイしたか
 
-### セッションが見つからない（404エラー）
+- 環境変数が正しく設定されているか
+- Upstash ダッシュボードで正しい URL とトークンをコピーしたか
+- Railway 等の場合、Variables 設定後に再デプロイしたか
+
+### セッションが見つからない（404 エラー）
 
 **症状**: `{"error":"Invalid session"}`
 
 **原因**:
-1. セッションが期限切れ（1時間経過）
-2. Redis接続が失敗している
-3. セッションIDが間違っている
+
+1. セッションが期限切れ（1 時間経過）
+2. Redis 接続が失敗している
+3. セッション ID が間違っている
 
 **確認**:
+
 ```bash
 # Upstash Data Browserでキーを確認
 # キーが存在するか？
 # TTLが残っているか？
 ```
 
-### 複数インスタンス問題（503エラー）
+### 複数インスタンス問題（503 エラー）
 
 **症状**: `{"error":"Service temporarily unavailable"}`
 
-**説明**: セッションはRedisに存在するが、SSE接続が別インスタンスにある
+**説明**: セッションは Redis に存在するが、SSE 接続が別インスタンスにある
 
-**対策**: Railwayで単一インスタンスに制限する設定（無料プランでは自動）
+**対策**: Railway で単一インスタンスに制限する設定（無料プランでは自動）
 
 ---
 
-## Redisなしでの動作（フォールバック）
+## Redis なしでの動作（フォールバック）
 
-Redis環境変数が設定されていない場合、自動的にメモリ内セッション管理にフォールバック：
+Redis 環境変数が設定されていない場合、自動的にメモリ内セッション管理にフォールバック：
 
-```
+```sh
 ⚠️  Redis not configured, falling back to in-memory sessions
 Redis Sessions: DISABLED (in-memory)
 ```
 
 **制限**:
+
 - 単一インスタンスでのみ動作
-- 複数インスタンス環境では404エラー発生
+- 複数インスタンス環境では 404 エラー発生
 
 **用途**:
+
 - ローカル開発
 - 単一サーバー運用
 
@@ -257,10 +268,11 @@ Redis Sessions: DISABLED (in-memory)
 - **ストレージ**: 256MB
 - **帯域幅**: 200MB/日
 
-**VRM MCPの使用量目安**:
-- セッション作成: 1コマンド
-- セッション延長（30秒ごと）: 1コマンド
-- 1時間接続: 約120コマンド
+**VRM MCP の使用量目安**:
+
+- セッション作成: 1 コマンド
+- セッション延長（30 秒ごと）: 1 コマンド
+- 1 時間接続: 約 120 コマンド
 
 **結論**: 無料枠で十分！
 
@@ -268,10 +280,9 @@ Redis Sessions: DISABLED (in-memory)
 
 ## 次のステップ
 
-1. ✅ Upstash Redisセットアップ完了
+1. ✅ Upstash Redis セットアップ完了
 2. ✅ 環境変数設定
 3. ✅ ローカルでテスト
-4. 🚀 Railwayにデプロイ
+4. 🚀 Railway にデプロイ
 
-Railwayデプロイ手順は `REMOTE_SETUP.md` を参照してください。
-
+Railway デプロイ手順は `REMOTE_SETUP.md` を参照してください。
