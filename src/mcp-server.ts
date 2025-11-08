@@ -147,8 +147,8 @@ class VRMMCPServer {
 
     // VRM 状態初期化
     this.vrmState = {
-      modelPath: null,
-      isLoaded: false,
+      modelPath: "lvncer.vrm",
+      isLoaded: true,
       expressions: new Map(),
       pose: {
         position: { x: 0, y: 0, z: 0 },
@@ -353,6 +353,11 @@ class VRMMCPServer {
           isLoaded: this.vrmState.isLoaded,
         })}\n\n`
       );
+
+      if (this.vrmState.modelPath) {
+        const filePath = `/models/${this.vrmState.modelPath}`;
+        res.write(`event: load_vrm_model\ndata: ${JSON.stringify({ filePath })}\n\n`);
+      }
 
       // 心拍送信
       const heartbeat = setInterval(() => {
