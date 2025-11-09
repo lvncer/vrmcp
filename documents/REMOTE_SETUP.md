@@ -1,6 +1,6 @@
 # リモート MCP サーバー セットアップガイド
 
-このガイドでは、VRM MCP サーバーを Vercel にデプロイし、リモートからアクセスする方法を説明します。
+このガイドでは、VRM MCP サーバーを Railway にデプロイし、リモートからアクセスする方法を説明します。
 
 ## 概要
 
@@ -32,6 +32,24 @@
                                     │  Viewer (Browser)│
                                     └──────────────────┘
 ```
+
+## 環境変数
+
+### リモート運用用（Railway/Render 等）
+
+| 環境変数                   | 説明                                   | 必須 |
+| -------------------------- | -------------------------------------- | ---- |
+| `MCP_API_KEY`              | API キー（認証用）                     | ⚠️   |
+| `ALLOWED_ORIGINS`          | 許可するオリジン（CORS、カンマ区切り） | ✅   |
+| `UPSTASH_REDIS_REST_URL`   | Upstash Redis の URL（セッション管理） | ⚠️   |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis のトークン               | ⚠️   |
+
+### ゲートウェイ用（Claude Desktop 連携）
+
+| 環境変数         | 説明                      | 例                                           |
+| ---------------- | ------------------------- | -------------------------------------------- |
+| `MCP_REMOTE_URL` | リモート MCP サーバー URL | `https://vrm-mcp-xxx.vercel.app/api/mcp/sse` |
+| `MCP_API_KEY`    | API キー                  | `your-secret-key`                            |
 
 ## 0. 事前準備：Redis（Upstash）のセットアップ
 

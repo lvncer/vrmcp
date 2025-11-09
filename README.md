@@ -3,131 +3,22 @@
 VRM モデルを AI が自然言語で制御できる MCP サーバー。
 Claude Desktop から自然言語で指示するだけで、Web ブラウザで VRM モデルがリアルタイムに動きます。
 
-## 特徴
-
-- **自然言語制御**: 「嬉しい表情で手を振って」→ AI が自動的にツールを呼び出し
-- **VRMA アニメーション対応**: VRMA ファイルの読み込み・再生（ループ・フェード対応）
-
 ## セットアップ
 
-### セットアップ方法の選択
+このプロジェクトは 2 つの運用モードをサポートしています：
 
-このプロジェクトは2つの運用モードをサポートしています：
+1. **ローカルモード**: ローカル環境で MCP サーバーを起動（従来の方法）
 
-1. **ローカルモード**: ローカル環境でMCPサーバーを起動（従来の方法）
-   - [ローカルセットアップガイド](./documents/SETUP.md)
+   - [ローカルセットアップガイド](./documents/LOCAL_SETUP.md)
 
-2. **リモートモード**: Vercelにデプロイして、どこからでもアクセス（推奨）
+2. **リモートモード**: Vercel にデプロイして、どこからでもアクセス（推奨）
    - [リモートセットアップガイド](./documents/REMOTE_SETUP.md)
 
-以下は、ローカルモードのクイックスタートです。
+## 使い方
 
-### 1. インストール
+利用可能なツールと使い方をまとめています。
 
-```bash
-cd /Users/your-name//vrm-mcp
-npm install
-```
-
-### 2. ビルド
-
-```bash
-npm run build
-```
-
-### 3. VRM/VRMA ファイルの配置
-
-#### 方法 A: 環境変数で好きな場所を指定（推奨）
-
-```bash
-# 好きな場所にディレクトリ作成
-mkdir -p ~/Documents/MyVRMs/{models,animations}
-
-# VRM/VRMAファイルを配置
-cp your-character.vrm ~/Documents/MyVRMs/models/
-cp your-animation.vrma ~/Documents/MyVRMs/animations/
-```
-
-#### 方法 B: プロジェクト内に配置（デフォルト）
-
-```bash
-# プロジェクト内に配置
-cp your-character.vrm public/models/
-cp your-animation.vrma public/animations/
-```
-
-### 4. Claude Desktop 設定
-
-`~/Library/Application Support/Claude/claude_desktop_config.json` を編集：
-
-```json
-{
-  "mcpServers": {
-    "vrm-control": {
-      "command": "node",
-      "args": ["/Users/lvncer/GitRepos/vrm-mcp/dist/mcp-server.js"],
-      "env": {
-        "VRM_MODELS_DIR": "/Users/lvncer/Documents/MyVRMs/models",
-        "VRMA_ANIMATIONS_DIR": "/Users/lvncer/Documents/MyVRMs/animations",
-        "VIEWER_PORT": "3000"
-      }
-    }
-  }
-}
-```
-
-**環境変数を省略した場合**: デフォルトで `./public/models/` と `./public/animations/` を使用
-
-### 5. 起動
-
-1. **Claude Desktop を起動** → 自動的に MCP サーバーが起動します
-2. **ブラウザでアクセス**: [http://localhost:3000](http://localhost:3000)
-3. **Claude Desktop で指示**: 「どんな VRM モデルがある？」
-
-## 📖 使い方
-
-### VRM モデルの読み込み
-
-```text
-あなた: どんなVRMモデルがある？
-Claude: character.vrm、character2.vrm、avatar.vrm があります
-
-あなた: character.vrm を読み込んで
-Claude: ✓ VRMモデルを読み込みました
-```
-
-### 表情制御
-
-```text
-あなた: 嬉しい表情にして
-Claude: ✓ 表情 "happy" を強さ 1.0 で設定しました
-```
-
-### VRMA アニメーション
-
-```text
-あなた: どんなアニメーションがある？
-Claude: greeting.vrma、wave.vrma、dance.vrma、bow.vrma があります
-
-あなた: 笑顔で挨拶して
-Claude:
-  ✓ VRMAアニメーション "greeting" を読み込みました
-  ✓ 表情 "happy" を強さ 1.0 で設定しました
-  ▶ VRMAアニメーション "greeting" を再生しました
-
-あなた: ダンスを繰り返して
-Claude: ▶ VRMAアニメーション "dance" を再生しました（ループ）
-
-あなた: 止めて
-Claude: ⏹ VRMAアニメーションを停止しました
-```
-
-### ボーン操作
-
-```text
-あなた: 右手を上げて
-Claude: ✓ ボーン "rightUpperArm" をアニメーションしました
-```
+- [ツールとユースケース](./documents/tool-usecases.md)
 
 ## 利用可能なツール
 
@@ -149,50 +40,18 @@ Claude: ✓ ボーン "rightUpperArm" をアニメーションしました
 vrm-mcp/
 ├── src/
 │   ├── mcp-server.ts          # MCPサーバー実装（stdio + SSE）
+│   ├── redis-client.ts
 │   └── gateway.ts             # stdio↔SSEゲートウェイ（Claude Desktop用）
 ├── api/
 │   ├── mcp/
-│   │   ├── sse.ts             # Vercel: MCP SSEエンドポイント
-│   │   └── messages.ts        # Vercel: MCP POSTエンドポイント
+│   │   ├── sse.ts             # MCP SSEエンドポイント
+│   │   └── messages.ts        # MCP POSTエンドポイント
 │   └── viewer/
-│       └── sse.ts             # Vercel: Viewer SSEエンドポイント
+│       └── sse.ts             # Viewer SSEエンドポイント
 ├── public/
 │   ├── index.html             # VRMビューア（SSE対応）
 │   ├── models/                # VRMモデル配置（デフォルト）
 │   └── animations/            # VRMAアニメーション配置（デフォルト）
-├── documents/
-│   ├── SETUP.md               # ローカルセットアップガイド
-│   └── REMOTE_SETUP.md        # リモートセットアップガイド
-├── dist/                      # ビルド出力
-├── vercel.json                # Vercel設定
-├── test-sse.sh                # SSE接続テストスクリプト
 ├── package.json
-├── tsconfig.json
 └── README.md
 ```
-
-## 環境変数
-
-### ローカル開発用
-
-| 環境変数              | 説明                                      | デフォルト値          |
-| --------------------- | ----------------------------------------- | --------------------- |
-| `VRM_MODELS_DIR`      | VRM モデルファイルのディレクトリ          | `./public/models`     |
-| `VRMA_ANIMATIONS_DIR` | VRMA アニメーションファイルのディレクトリ | `./public/animations` |
-| `VIEWER_PORT`         | Web ビューアのポート番号                  | `3000`                |
-
-### リモート運用用（Railway/Render等）
-
-| 環境変数                      | 説明                                   | 必須 |
-| ----------------------------- | -------------------------------------- | ---- |
-| `MCP_API_KEY`                 | APIキー（認証用）                      | ⚠️   |
-| `ALLOWED_ORIGINS`             | 許可するオリジン（CORS、カンマ区切り） | ✅   |
-| `UPSTASH_REDIS_REST_URL`      | Upstash RedisのURL（セッション管理）   | ⚠️   |
-| `UPSTASH_REDIS_REST_TOKEN`    | Upstash Redisのトークン                | ⚠️   |
-
-### ゲートウェイ用（Claude Desktop連携）
-
-| 環境変数         | 説明                  | 例                                            |
-| ---------------- | --------------------- | --------------------------------------------- |
-| `MCP_REMOTE_URL` | リモートMCPサーバーURL | `https://vrm-mcp-xxx.vercel.app/api/mcp/sse` |
-| `MCP_API_KEY`    | APIキー               | `your-secret-key`                             |
