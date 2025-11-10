@@ -1,44 +1,20 @@
 # Tool Usecases
 
-## VRM モデルの読み込み
+| `list_vrm_files` | 利用可能な VRM/VRMA ファイル一覧 | 「どんな VRM がある？」 |
+| `load_vrm_model` | VRM モデル読み込み | 「character.vrm を読み込んで」 |
 
-```text
-あなた: どんなVRMモデルがある？
-Claude: character.vrm、character2.vrm、avatar.vrm があります
+![load_vrm_model](../public/images/load_vrm_model.png)
 
-あなた: character.vrm を読み込んで
-Claude: ✓ VRMモデルを読み込みました
-```
+| `set_vrm_expression` | 表情設定 | 「嬉しい表情にして」 |
 
-## 表情制御
+![set_vrm_expression](../public/images/set_vrm_expression.png)
 
-```text
-あなた: 嬉しい表情にして
-Claude: ✓ 表情 "happy" を強さ 1.0 で設定しました
-```
+| `set_vrm_pose` | ポーズ設定 | 「右を向いて」 |
 
-## VRMA アニメーション
+![set_vrm_pose](../public/images/set_vrm_pose.png)
 
-```text
-あなた: どんなアニメーションがある？
-Claude: greeting.vrma、wave.vrma、dance.vrma、bow.vrma があります
-
-あなた: 笑顔で挨拶して
-Claude:
-  ✓ VRMAアニメーション "greeting" を読み込みました
-  ✓ 表情 "happy" を強さ 1.0 で設定しました
-  ▶ VRMAアニメーション "greeting" を再生しました
-
-あなた: ダンスを繰り返して
-Claude: ▶ VRMAアニメーション "dance" を再生しました（ループ）
-
-あなた: 止めて
-Claude: ⏹ VRMAアニメーションを停止しました
-```
-
-## ボーン操作
-
-```text
-あなた: 右手を上げて
-Claude: ✓ ボーン "rightUpperArm" をアニメーションしました
-```
+| `animate_vrm_bone` | ボーン操作 | 「右手を上げて」 |
+| `load_vrma_animation` | VRMA アニメーション読み込み | 「greeting.vrma を読み込んで」 |
+| `play_vrma_animation` | アニメーション再生 | 「挨拶して」 |
+| `stop_vrma_animation` | アニメーション停止 | 「止めて」 |
+| `get_vrm_status` | 状態取得 | 「現在の状態は？」 |
