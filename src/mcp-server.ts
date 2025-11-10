@@ -117,7 +117,7 @@ class VRMMCPServer {
     this.mcpApiKey = process.env.MCP_API_KEY;
     this.allowedOrigins = process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(",")
-      : ["http://localhost:3000"];
+      : ["http://localhost:3000", "http://localhost:5173"];
 
     console.error("=== VRM MCP Server Configuration ===");
     console.error(`VRM Models Dir: ${this.vrmModelsDir}`);
@@ -165,8 +165,12 @@ class VRMMCPServer {
     const httpServer = createServer(this.expressApp);
 
     // 静的ファイル配信
+    // Viteビルド済みクライアント: dist/client (dist からの相対パスで __dirname/client)
+    this.expressApp.use(express.static(path.join(__dirname, "client")));
+    // 3Dアセット
     this.expressApp.use("/models", express.static(this.vrmModelsDir));
     this.expressApp.use("/animations", express.static(this.vrmaAnimationsDir));
+    // 互換: public 配下（必要に応じて）
     this.expressApp.use(express.static(path.join(__dirname, "../public")));
 
     // WebSocket サーバー
@@ -180,6 +184,21 @@ class VRMMCPServer {
     this.setupHandlers();
     this.setupWebSocket();
     this.setupSSEEndpoints();
+
+    // SPA fallback: 非APIルートはクライアントのindex.htmlを返す
+    this.expressApp.get("*", (req, res) => {
+      const url = req.path || "";
+      if (url.startsWith("/api")) {
+        res.status(404).end();
+        return;
+      }
+      const indexPath = path.join(__dirname, "client", "index.html");
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          res.status(404).end();
+        }
+      });
+    });
   }
 
   // セキュリティミドルウェア
@@ -225,23 +244,23 @@ class VRMMCPServer {
 
   private setupSSEEndpoints(): void {
     // OPTIONS for CORS preflight
-    this.expressApp.options("/mcp/sse", (req, res) => {
+    this.expressApp.options("/api/mcp/sse", (req, res) => {
       this.checkCORS(req, res);
       res.status(200).end();
     });
 
-    this.expressApp.options("/mcp/messages", (req, res) => {
+    this.expressApp.options("/api/mcp/messages", (req, res) => {
       this.checkCORS(req, res);
       res.status(200).end();
     });
 
     // MCP SSE endpoint (GET)
-    this.expressApp.get("/mcp/sse", async (req, res) => {
+    this.expressApp.get("/api/mcp/sse", async (req, res) => {
       if (!this.checkAuth(req, res)) return;
       if (!this.checkCORS(req, res)) return;
       if (!this.checkRateLimit(req, res)) return;
 
-      const transport = new SSEServerTransport("/mcp/messages", res);
+      const transport = new SSEServerTransport("/api/mcp/messages", res);
       this.sseTransports.set(transport.sessionId, transport);
 
       // Redisにセッション保存
@@ -289,7 +308,7 @@ class VRMMCPServer {
     });
 
     // MCP messages endpoint (POST)
-    this.expressApp.post("/mcp/messages", async (req, res) => {
+    this.expressApp.post("/api/mcp/messages", async (req, res) => {
       if (!this.checkAuth(req, res)) return;
       if (!this.checkCORS(req, res)) return;
       if (!this.checkRateLimit(req, res)) return;
@@ -333,7 +352,7 @@ class VRMMCPServer {
     });
 
     // Viewer SSE endpoint (GET)
-    this.expressApp.get("/viewer/sse", (req, res) => {
+    this.expressApp.get("/api/viewer/sse", (req, res) => {
       if (!this.checkCORS(req, res)) return;
       if (!this.checkRateLimit(req, res)) return;
 
