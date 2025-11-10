@@ -24,7 +24,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import fetch from "node-fetch";
 
-const REMOTE_URL = process.env.MCP_REMOTE_URL || "http://localhost:3000/mcp/sse";
+const REMOTE_URL = process.env.MCP_REMOTE_URL || "http://localhost:3000/api/mcp/sse";
 const API_KEY = process.env.MCP_API_KEY;
 
 class MCPGateway {

@@ -12,7 +12,21 @@ Claude Desktop から自然言語で指示するだけで、Web ブラウザで 
    - [ローカルセットアップガイド](./documents/LOCAL_SETUP.md)
 
 2. **リモートモード**: Vercel にデプロイして、どこからでもアクセス（推奨）
+
    - [リモートセットアップガイド](./documents/REMOTE_SETUP.md)
+
+     ```json
+     {
+       "mcpServers": {
+         "vrmcp": {
+           "url": "https://vrmcp.up.railway.app/api/mcp/sse",
+           "headers": {
+             "x-api-key": "your-super-secret-key-12345"
+           }
+         }
+       }
+     }
+     ```
 
 ## 使い方
 

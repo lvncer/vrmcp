@@ -9,11 +9,13 @@
     "vrm-mcp-gateway": "./dist/gateway.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && vite build",
     "start": "node dist/mcp-server.js",
     "gateway": "node dist/gateway.js",
-    "dev": "tsc && node dist/mcp-server.js",
-    "watch": "tsc --watch"
+    "dev": "concurrently \"tsc --watch\" \"vite\" \"nodemon dist/mcp-server.js\"",
+    "watch": "tsc --watch",
+    "client:dev": "vite",
+    "server:dev": "nodemon dist/mcp-server.js"
   },
   "keywords": [
     "vrm",
@@ -27,17 +29,27 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
+    "@pixiv/three-vrm": "^3.0.0",
     "@upstash/redis": "^1.35.6",
-    "@vercel/node": "^3.0.0",
     "express": "^4.18.2",
     "node-fetch": "^3.3.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.167.1",
     "ws": "^8.16.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/three": "^0.181.0",
     "@types/ws": "^8.5.10",
-    "typescript": "^5.3.3"
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.4.0"
   },
   "engines": {
     "node": "20.x"

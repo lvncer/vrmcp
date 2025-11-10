@@ -190,8 +190,7 @@ Cursor から直接 SSE 接続する場合の設定例：
 {
   "mcpServers": {
     "vrm-remote": {
-      "type": "sse",
-      "url": "https://vrmcp.up.railway.app/mcp/sse",
+      "url": "https://vrmcp.up.railway.app/api/mcp/sse",
       "headers": {
         "x-api-key": "your-super-secret-key-12345"
       }
