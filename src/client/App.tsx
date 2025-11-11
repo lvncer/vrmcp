@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
 import { VRM, VRMLoaderPlugin } from '@pixiv/three-vrm';
 
 export function App() {
@@ -45,6 +46,10 @@ export function App() {
     const loadedAnimations = new Map<string, THREE.AnimationClip>();
 
     const loader = new GLTFLoader();
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderConfig({ type: 'wasm' });
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+    loader.setDRACOLoader(dracoLoader);
     loader.register((parser: any) => new VRMLoaderPlugin(parser));
 
     function onResize() {
@@ -154,27 +159,36 @@ export function App() {
       es.addEventListener('play_gltf_animation', (event: MessageEvent) => {
         const data = JSON.parse(event.data);
         if (!vrm || !mixer) return;
-        const clip = loadedAnimations.get(data.animationName);
-        if (!clip) {
-          console.warn('Animation not loaded:', data.animationName);
-          return;
-        }
-
-        const next = mixer.clipAction(clip, vrm.scene);
-        next.reset();
-        next.setLoop(
-          data.loop ? THREE.LoopRepeat : THREE.LoopOnce,
-          data.loop ? Infinity : 1
-        );
-        next.clampWhenFinished = true;
-        const fadeIn = typeof data.fadeInDuration === 'number' ? data.fadeInDuration : 0.3;
-
-        if (currentAction && currentAction !== next) {
-          currentAction.fadeOut(fadeIn);
-        }
-        next.fadeIn(fadeIn).play();
-        currentAction = next;
-        setAnimationName(String(data.animationName));
+        const v = vrm!;
+        const m = mixer!;
+        let tries = 10;
+        const attempt = () => {
+          const clip = loadedAnimations.get(data.animationName);
+          if (!clip) {
+            if (tries-- > 0) {
+              setTimeout(attempt, 200);
+              return;
+            } else {
+              console.warn('Animation not loaded:', data.animationName);
+              return;
+            }
+          }
+          const next = m.clipAction(clip, v.scene);
+          next.reset();
+          next.setLoop(
+            data.loop ? THREE.LoopRepeat : THREE.LoopOnce,
+            data.loop ? Infinity : 1
+          );
+          next.clampWhenFinished = true;
+          const fadeIn = typeof data.fadeInDuration === 'number' ? data.fadeInDuration : 0.3;
+          if (currentAction && currentAction !== next) {
+            currentAction.fadeOut(fadeIn);
+          }
+          next.fadeIn(fadeIn).play();
+          currentAction = next;
+          setAnimationName(String(data.animationName));
+        };
+        attempt();
       });
 
       es.addEventListener('stop_gltf_animation', (event: MessageEvent) => {

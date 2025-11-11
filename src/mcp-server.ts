@@ -356,16 +356,20 @@ class VRMMCPServer {
       if (!this.checkCORS(req, res)) return;
       if (!this.checkRateLimit(req, res)) return;
 
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      });
+      // HTTP/2 でも安定するようヘッダーを明示 + バッファリング無効化
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.setHeader("Connection", "keep-alive");
+      if (typeof (res as any).flushHeaders === "function") {
+        (res as any).flushHeaders();
+      }
 
       this.viewerSSEClients.add(res);
       console.error("✓ Viewer SSE client connected");
 
       // 接続時に現在の状態を送信
+      res.write(`retry: 10000\n\n`);
       res.write(
         `event: init\ndata: ${JSON.stringify({
           modelPath: this.vrmState.modelPath,
@@ -663,11 +667,18 @@ class VRMMCPServer {
     const eventData = JSON.stringify(message.data || message);
     const sseMessage = `event: ${eventType}\ndata: ${eventData}\n\n`;
 
+    const totals = { total: this.viewerSSEClients.size, writable: 0 };
     this.viewerSSEClients.forEach((client) => {
       if (client.writable) {
-        client.write(sseMessage);
+        try {
+          client.write(sseMessage);
+          totals.writable += 1;
+        } catch (_) {
+          // ignore individual stream errors
+        }
       }
     });
+    console.error(`SSE broadcast: ${eventType} -> viewers=${totals.total} writable=${totals.writable}`);
   }
 
   // ===== ツール実装 =====
@@ -902,6 +913,11 @@ class VRMMCPServer {
 
     if (!this.vrmState.isLoaded) {
       throw new Error("VRMモデルが読み込まれていません");
+    }
+
+    // 未ロード名の再生を防止（フロントで"Animation not loaded"になるのを前で弾く）
+    if (!this.vrmState.loadedAnimations.includes(animationName)) {
+      throw new Error(`アニメーションが未ロードです: ${animationName}`);
     }
 
     this.broadcast({
