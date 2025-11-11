@@ -11,7 +11,7 @@ Claude Desktop から自然言語で指示するだけで、Web ブラウザで 
 
    - [ローカルセットアップガイド](./documents/LOCAL_SETUP.md)
 
-2. **リモートモード**: Vercel にデプロイして、どこからでもアクセス（推奨）
+2. **リモートモード**（推奨）
 
    - [リモートセットアップガイド](./documents/REMOTE_SETUP.md)
 
