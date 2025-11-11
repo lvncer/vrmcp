@@ -356,16 +356,20 @@ class VRMMCPServer {
       if (!this.checkCORS(req, res)) return;
       if (!this.checkRateLimit(req, res)) return;
 
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      });
+      // HTTP/2 でも安定するようヘッダーを明示 + バッファリング無効化
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.setHeader("Connection", "keep-alive");
+      if (typeof (res as any).flushHeaders === "function") {
+        (res as any).flushHeaders();
+      }
 
       this.viewerSSEClients.add(res);
       console.error("✓ Viewer SSE client connected");
 
       // 接続時に現在の状態を送信
+      res.write(`retry: 10000\n\n`);
       res.write(
         `event: init\ndata: ${JSON.stringify({
           modelPath: this.vrmState.modelPath,
@@ -498,7 +502,7 @@ class VRMMCPServer {
         {
           name: "list_vrm_files",
           description:
-            "利用可能なVRMモデルとVRMAアニメーションファイルの一覧を取得する",
+            "利用可能なVRMモデルとglTFアニメーションファイルの一覧を取得する",
           inputSchema: {
             type: "object",
             properties: {
@@ -511,15 +515,15 @@ class VRMMCPServer {
           },
         },
         {
-          name: "load_vrma_animation",
-          description: "VRMAファイルからアニメーションを読み込む",
+          name: "load_gltf_animation",
+          description: "glTFファイルからアニメーションを読み込む",
           inputSchema: {
             type: "object",
             properties: {
               animationPath: {
                 type: "string",
                 description:
-                  "VRMAファイル名（例: greeting.vrma）環境変数 VRMA_ANIMATIONS_DIR からの相対パス",
+                  "glTFファイル名（例: walk.glb または walk.gltf）環境変数 VRMA_ANIMATIONS_DIR からの相対パス",
               },
               animationName: {
                 type: "string",
@@ -530,8 +534,8 @@ class VRMMCPServer {
           },
         },
         {
-          name: "play_vrma_animation",
-          description: "読み込み済みのVRMAアニメーションを再生する",
+          name: "play_gltf_animation",
+          description: "読み込み済みのglTFアニメーションを再生する",
           inputSchema: {
             type: "object",
             properties: {
@@ -552,8 +556,8 @@ class VRMMCPServer {
           },
         },
         {
-          name: "stop_vrma_animation",
-          description: "再生中のVRMAアニメーションを停止する",
+          name: "stop_gltf_animation",
+          description: "再生中のglTFアニメーションを停止する",
           inputSchema: {
             type: "object",
             properties: {
@@ -591,14 +595,14 @@ class VRMMCPServer {
           case "list_vrm_files":
             return await this.listVRMFiles(args as any);
 
-          case "load_vrma_animation":
-            return await this.loadVRMAAnimation(args as any);
+          case "load_gltf_animation":
+            return await this.loadGLTFAnimation(args as any);
 
-          case "play_vrma_animation":
-            return await this.playVRMAAnimation(args as any);
+          case "play_gltf_animation":
+            return await this.playGLTFAnimation(args as any);
 
-          case "stop_vrma_animation":
-            return await this.stopVRMAAnimation(args as any);
+          case "stop_gltf_animation":
+            return await this.stopGLTFAnimation(args as any);
 
           default:
             throw new McpError(
@@ -663,11 +667,18 @@ class VRMMCPServer {
     const eventData = JSON.stringify(message.data || message);
     const sseMessage = `event: ${eventType}\ndata: ${eventData}\n\n`;
 
+    const totals = { total: this.viewerSSEClients.size, writable: 0 };
     this.viewerSSEClients.forEach((client) => {
       if (client.writable) {
-        client.write(sseMessage);
+        try {
+          client.write(sseMessage);
+          totals.writable += 1;
+        } catch (_) {
+          // ignore individual stream errors
+        }
       }
     });
+    console.error(`SSE broadcast: ${eventType} -> viewers=${totals.total} writable=${totals.writable}`);
   }
 
   // ===== ツール実装 =====
@@ -827,7 +838,7 @@ class VRMMCPServer {
     if (type === "animations" || type === "all") {
       try {
         const files = await fs.readdir(this.vrmaAnimationsDir);
-        result.animations = files.filter((f) => f.endsWith(".vrma"));
+        result.animations = files.filter((f) => f.endsWith(".glb") || f.endsWith(".gltf"));
       } catch (error) {
         result.animations = [];
       }
@@ -839,7 +850,7 @@ class VRMMCPServer {
       result.models.forEach((f: string) => summary.push(`  - ${f}`));
     }
     if (result.animations) {
-      summary.push(`🎬 VRMAアニメーション (${result.animations.length}件):`);
+      summary.push(`🎬 glTFアニメーション (${result.animations.length}件):`);
       result.animations.forEach((f: string) => summary.push(`  - ${f}`));
     }
 
@@ -853,7 +864,7 @@ class VRMMCPServer {
     };
   }
 
-  private async loadVRMAAnimation(args: {
+  private async loadGLTFAnimation(args: {
     animationPath: string;
     animationName: string;
   }) {
@@ -871,7 +882,7 @@ class VRMMCPServer {
 
       // ブラウザに送信
       this.broadcast({
-        type: "load_vrma_animation",
+        type: "load_gltf_animation",
         data: {
           animationPath: `/animations/${animationPath}`,
           animationName,
@@ -882,18 +893,18 @@ class VRMMCPServer {
         content: [
           {
             type: "text",
-            text: `✓ VRMAアニメーション "${animationName}" を読み込みました: ${animationPath}`,
+            text: `✓ glTFアニメーション "${animationName}" を読み込みました: ${animationPath}`,
           },
         ],
       };
     } catch (error) {
       throw new Error(
-        `VRMAアニメーションの読み込みに失敗しました: ${animationPath}`
+        `glTFアニメーションの読み込みに失敗しました: ${animationPath}`
       );
     }
   }
 
-  private async playVRMAAnimation(args: {
+  private async playGLTFAnimation(args: {
     animationName: string;
     loop?: boolean;
     fadeInDuration?: number;
@@ -904,9 +915,13 @@ class VRMMCPServer {
       throw new Error("VRMモデルが読み込まれていません");
     }
 
-    // ブラウザに送信
+    // 未ロード名の再生を防止（フロントで"Animation not loaded"になるのを前で弾く）
+    if (!this.vrmState.loadedAnimations.includes(animationName)) {
+      throw new Error(`アニメーションが未ロードです: ${animationName}`);
+    }
+
     this.broadcast({
-      type: "play_vrma_animation",
+      type: "play_gltf_animation",
       data: { animationName, loop, fadeInDuration },
     });
 
@@ -914,7 +929,7 @@ class VRMMCPServer {
       content: [
         {
           type: "text",
-          text: `▶ VRMAアニメーション "${animationName}" を再生しました${
+          text: `▶ glTFアニメーション "${animationName}" を再生しました${
             loop ? "（ループ）" : ""
           }`,
         },
@@ -922,12 +937,11 @@ class VRMMCPServer {
     };
   }
 
-  private async stopVRMAAnimation(args: { fadeOutDuration?: number }) {
+  private async stopGLTFAnimation(args: { fadeOutDuration?: number }) {
     const { fadeOutDuration } = args;
 
-    // ブラウザに送信
     this.broadcast({
-      type: "stop_vrma_animation",
+      type: "stop_gltf_animation",
       data: { fadeOutDuration },
     });
 
@@ -935,7 +949,7 @@ class VRMMCPServer {
       content: [
         {
           type: "text",
-          text: `⏹ VRMAアニメーションを停止しました`,
+          text: `⏹ glTFアニメーションを停止しました`,
         },
       ],
     };

@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
 import { VRM, VRMLoaderPlugin } from '@pixiv/three-vrm';
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [modelName, setModelName] = useState<string>('Not loaded');
-  const [animationName] = useState<string>('None');
+  const [animationName, setAnimationName] = useState<string>('None');
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -41,8 +42,14 @@ export function App() {
     // VRM
     let vrm: VRM | null = null;
     let mixer: THREE.AnimationMixer | null = null;
+    let currentAction: THREE.AnimationAction | null = null;
+    const loadedAnimations = new Map<string, THREE.AnimationClip>();
 
     const loader = new GLTFLoader();
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderConfig({ type: 'wasm' });
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+    loader.setDRACOLoader(dracoLoader);
     loader.register((parser: any) => new VRMLoaderPlugin(parser));
 
     function onResize() {
@@ -89,6 +96,11 @@ export function App() {
           if (!vrm) throw new Error('VRM data not found');
           scene.add(vrm.scene);
           mixer = new THREE.AnimationMixer(vrm.scene);
+          loadedAnimations.clear();
+          if (currentAction) {
+            currentAction.stop();
+            currentAction = null;
+          }
           setModelName(String(data.filePath).split('/').pop() || 'Loaded');
         } catch (e) {
           console.error(e);
@@ -127,6 +139,72 @@ export function App() {
           }
         }
       });
+
+      es.addEventListener('load_gltf_animation', async (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        try {
+          const gltf = await loader.loadAsync(data.animationPath);
+          const clips: THREE.AnimationClip[] = (gltf as any).animations || [];
+          if (clips.length > 0) {
+            // ひとまず先頭クリップを登録（複数ある場合は拡張可）
+            loadedAnimations.set(data.animationName, clips[0]);
+          } else {
+            console.warn('No animations found in glTF:', data.animationPath);
+          }
+        } catch (e) {
+          console.error('Failed to load glTF animation:', e);
+        }
+      });
+
+      es.addEventListener('play_gltf_animation', (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (!vrm || !mixer) return;
+        const v = vrm!;
+        const m = mixer!;
+        let tries = 10;
+        const attempt = () => {
+          const clip = loadedAnimations.get(data.animationName);
+          if (!clip) {
+            if (tries-- > 0) {
+              setTimeout(attempt, 200);
+              return;
+            } else {
+              console.warn('Animation not loaded:', data.animationName);
+              return;
+            }
+          }
+          const next = m.clipAction(clip, v.scene);
+          next.reset();
+          next.setLoop(
+            data.loop ? THREE.LoopRepeat : THREE.LoopOnce,
+            data.loop ? Infinity : 1
+          );
+          next.clampWhenFinished = true;
+          const fadeIn = typeof data.fadeInDuration === 'number' ? data.fadeInDuration : 0.3;
+          if (currentAction && currentAction !== next) {
+            currentAction.fadeOut(fadeIn);
+          }
+          next.fadeIn(fadeIn).play();
+          currentAction = next;
+          setAnimationName(String(data.animationName));
+        };
+        attempt();
+      });
+
+      es.addEventListener('stop_gltf_animation', (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        const fadeOut = typeof data?.fadeOutDuration === 'number' ? data.fadeOutDuration : 0.3;
+        if (currentAction) {
+          currentAction.fadeOut(fadeOut);
+          const toStop = currentAction;
+          // 簡易的にフェードアウト後に停止
+          setTimeout(() => {
+            toStop.stop();
+          }, Math.max(0, fadeOut) * 1000 + 50);
+          currentAction = null;
+          setAnimationName('None');
+        }
+      });
     }
 
     connectSSE();
@@ -144,7 +222,7 @@ export function App() {
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#1a1a1a' }}>
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
       <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', background: 'rgba(0,0,0,.8)', padding: '12px 16px', borderRadius: 8, fontFamily: 'monospace', fontSize: 13 }}>
-        <div style={{ marginBottom: 8, color: '#00d4ff', fontWeight: 700 }}>VRM Viewer (VRMA対応)</div>
+        <div style={{ marginBottom: 8, color: '#00d4ff', fontWeight: 700 }}>VRM Viewer (glTF対応)</div>
         <div style={{ marginBottom: 4 }}>
           <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', marginRight: 8, background: status === 'connected' ? '#0f0' : '#f00' }} />
           <strong>Status:</strong> {status}
