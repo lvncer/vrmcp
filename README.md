@@ -38,14 +38,14 @@ Claude Desktop から自然言語で指示するだけで、Web ブラウザで 
 
 | Tool                  | 説明                             | 使用例                         |
 | --------------------- | -------------------------------- | ------------------------------ |
-| `list_vrm_files`      | 利用可能な VRM/VRMA ファイル一覧 | 「どんな VRM がある？」        |
+| `list_vrm_files`      | 利用可能な VRM/glTF ファイル一覧 | 「どんな VRM がある？」        |
 | `load_vrm_model`      | VRM モデル読み込み               | 「character.vrm を読み込んで」 |
 | `set_vrm_expression`  | 表情設定                         | 「嬉しい表情にして」           |
 | `set_vrm_pose`        | ポーズ設定                       | 「右を向いて」                 |
 | `animate_vrm_bone`    | ボーン操作                       | 「右手を上げて」               |
-| `load_vrma_animation` | VRMA アニメーション読み込み      | 「greeting.vrma を読み込んで」 |
-| `play_vrma_animation` | アニメーション再生               | 「挨拶して」                   |
-| `stop_vrma_animation` | アニメーション停止               | 「止めて」                     |
+| `load_gltf_animation` | glTF アニメーション読み込み      | 「walk.glb を読み込んで」      |
+| `play_gltf_animation` | アニメーション再生               | 「挨拶して」                   |
+| `stop_gltf_animation` | アニメーション停止               | 「止めて」                     |
 | `get_vrm_status`      | 状態取得                         | 「現在の状態は？」             |
 
 ## プロジェクト構造
@@ -65,7 +65,7 @@ vrm-mcp/
 ├── public/
 │   ├── index.html             # VRMビューア（SSE対応）
 │   ├── models/                # VRMモデル配置（デフォルト）
-│   └── animations/            # VRMAアニメーション配置（デフォルト）
+│   └── animations/            # glTFアニメーション配置（.glb/.gltf）
 ├── package.json
 └── README.md
 ```
